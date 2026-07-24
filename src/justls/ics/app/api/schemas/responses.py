@@ -164,6 +164,9 @@ class FrameRecordResponse(BaseModel):
     quicklook: DataProductRefResponse | None = None
     fits_header: FitsHeaderSummaryResponse | None = None
     quality_flags: list[str] = Field(default_factory=list)
+    physical_camera_id: str | None = None
+    logical_channels: list[str] = Field(default_factory=list)
+    shared_capture_id: str | None = None
 
 
 class ExposureRecordResponse(BaseModel):
@@ -186,6 +189,9 @@ class ExposureRecordResponse(BaseModel):
     quality_flags: list[str] = Field(default_factory=list)
     simulated: bool
     message: str | None = None
+    physical_camera_id: str | None = None
+    logical_channels: list[str] = Field(default_factory=list)
+    shared_capture_id: str | None = None
 
 
 class ObservationMetaResponse(BaseModel):
@@ -220,6 +226,7 @@ class ObservationStatusResponse(BaseModel):
     last_exposure: ObservationExposureResponse | None = None
     observation_meta: ObservationMetaResponse | None = None
     latest_exposure_record: ExposureRecordResponse | None = None
+    camera_status: dict[str, Any] | None = None
 
 
 class RuntimeSubsystemStateResponse(BaseModel):

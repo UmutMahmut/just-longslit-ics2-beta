@@ -66,7 +66,10 @@ def test_detector_arm_creates_observation_meta():
     assert armed.observation_meta["frame_type"] == "science"
     assert armed.observation_meta["operator_note"] == "meta-test"
     assert armed.observation_meta["instrument_snapshot"]["slit_width_um"] == 120.0
-    assert armed.observation_meta["detector_config"]["profile_name"] == "default"
+    assert (
+        armed.observation_meta["detector_config"]["profile_name"]
+        == "campus-beta-shared-camera"
+    )
 
 def test_detector_finish_normal_flow():
     runtime = RuntimeAssembler().build()
@@ -83,6 +86,11 @@ def test_detector_finish_normal_flow():
     exposing = runtime.detector.start()
     assert exposing.state == ExposureState.EXPOSING
     assert exposing.observation_meta["state"] == "exposing"
+    assert exposing.camera_status["state"] == "exposing"
+    assert (
+        exposing.camera_status["active_exposure"]["exp_id"]
+        == exposing.armed_exposure["exp_id"]
+    )
 
     completed = runtime.detector.finish_normal()
     assert completed.state == ExposureState.COMPLETED
@@ -100,8 +108,15 @@ def test_detector_finish_normal_flow():
     assert completed.observation_meta["frame_results"][0]["early_stop"] is False
     assert completed.latest_exposure_record is not None
     assert completed.latest_exposure_record["state"] == "completed"
-    assert completed.latest_exposure_record["data_product_state"] == "simulated_reference"
-    assert completed.latest_exposure_record["primary_data_product"]["exists"] is False
+    assert completed.latest_exposure_record["data_product_state"] == "available"
+    assert completed.latest_exposure_record["primary_data_product"]["exists"] is True
+    assert completed.latest_exposure_record["quicklook"]["exists"] is True
+    assert completed.latest_exposure_record["logical_channels"] == ["B", "G", "R"]
+    assert (
+        completed.latest_exposure_record["physical_camera_id"]
+        == "science-camera-01"
+    )
+    assert completed.camera_status["state"] == "idle"
     assert completed.observation_meta["exposure_record"]["record_id"] == completed.latest_exposure_record["record_id"]
 
 def test_detector_stop_readout_flow():

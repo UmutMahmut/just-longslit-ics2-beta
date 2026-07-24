@@ -45,7 +45,11 @@ def test_api_get_detector_config():
     assert response.status_code == 200
     data = response.json()
 
-    assert data["profile_name"] == "default"
+    assert data["profile_name"] == "campus-beta-shared-camera"
+    assert data["shared_physical_camera"] is True
+    assert {
+        channel["source_camera_id"] for channel in data["channels"].values()
+    } == {"science-camera-01"}
     assert data["channels"]["B"]["camera_role"] == "science_b"
     assert data["channels"]["G"]["camera_role"] == "science_g"
     assert data["channels"]["R"]["camera_role"] == "science_r"

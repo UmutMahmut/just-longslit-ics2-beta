@@ -44,7 +44,7 @@ def test_api_root():
 
     assert response.status_code == 200
     data = response.json()
-    assert data["message"] == "JUST Long-Slit ICS 2.0 is running."
+    assert data["message"] == "ICS Beta is running."
     assert data["docs"] == "/docs"
     assert data["openapi"] == "/openapi.json"
 
@@ -93,7 +93,10 @@ def test_api_status_full():
     assert data["calibration"]["mode"] == "science"
     assert data["observation"]["state"] == "ready_to_arm"
     assert data["observation"]["observation_meta"] is None
-    assert data["detector_config"]["profile_name"] == "default"
+    assert (
+        data["detector_config"]["profile_name"]
+        == "campus-beta-shared-camera"
+    )
 
 def test_api_capabilities():
     client = TestClient(app)
@@ -106,7 +109,7 @@ def test_api_capabilities():
     assert data["slit_angle"] is True
     assert data["calib_lamps"] is True
     assert data["rotator"] is False
-    assert data["slit_monitor_camera"] is False
+    assert data["slit_monitor_camera"] is True
+    assert data["science_channels_bgr"] is True
     assert data["guider"] is False
-    assert data["science_channels_bgr"] is False
     assert data["fast_photometry"] is False

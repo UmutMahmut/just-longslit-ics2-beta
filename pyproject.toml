@@ -3,9 +3,9 @@ requires = ["setuptools>=77.0.3"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "just-longslit-ics2"
-version = "0.0.1"
-description = "Instrument Control System for the JUST Telescope long-slit spectrograph."
+name = "just-longslit-ics-beta"
+version = "0.1.0"
+description = "Campus integration branch for the long-slit Instrument Control System."
 readme = "README.md"
 requires-python = ">=3.10"
 classifiers = [
@@ -17,6 +17,8 @@ classifiers = [
 ]
 dependencies = [
   "fastapi>=0.110,<1.0",
+  "numpy>=1.26,<3",
+  "pillow>=10,<13",
   "pydantic>=2,<3",
 ]
 

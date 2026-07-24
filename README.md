@@ -1,18 +1,21 @@
-# JUST Long-Slit ICS 2.0
+# ICS Beta
 
-Instrument Control System for the JUST Telescope long-slit spectrograph.
+Campus-integration branch of the long-slit Instrument Control System.
 
-This repository is not only a web UI prototype. It contains the current ICS 2.0 software backbone: a simulation-first backend, a FastAPI control/status surface, an operator-console prototype, and the domain/API contracts being hardened before real-hardware integration.
+ICS Beta inherits the ICS 2.0 backbone and keeps its existing operator-console
+layout. Its purpose is to run the smallest useful campus observing loop with one
+science camera, one optional slit/guide camera, and a manually operated compact
+spectrograph.
 
 ## Current baseline
 
-Current code baseline: after Phase 2.9-E exposure-record and read-only observatory-context closeout.
+Current code baseline: campus camera integration vertical slice.
 
 Validation baseline:
 
 ```text
 pytest -q
-244 passed
+249 passed
 ```
 
 Current default UI behavior:
@@ -35,8 +38,11 @@ The current repository supports a simulator-backed single-exposure control loop 
 Setup / Instrument context
   -> Observation preview
   -> backend readiness gate
-  -> command feedback
-  -> ExposureRecord / simulated DataProductRef
+  -> arm
+  -> start physical-camera exposure
+  -> finish or early stop/readout
+  -> local FITS + PNG quicklook
+  -> ExposureRecord / available DataProductRef
   -> read-only observatory context visibility
   -> v7 Observe command summary
   -> raw JSON diagnostics when needed
@@ -57,8 +63,14 @@ Implemented capabilities include:
 - Side-effect-free observation preview contract.
 - Backend arm gate based on current readiness preview.
 - Observation command feedback contract for success, blocked, and failed command results.
-- ExposureRecord, FrameRecord, DataProductRef, QuicklookRef-style references, FITS header summary placeholders, and quality flags.
-- Simulator-backed data-product references that explicitly do not claim real FITS files exist.
+- Stateful science-camera lifecycle: start, finish/readout, early stop/readout,
+  and abort.
+- One physical science camera bridged to the existing logical B/G/R channels.
+- Independent simulated slit-camera live preview.
+- Actual local FITS files and PNG quicklooks in simulation mode.
+- ExposureRecord provenance for the physical camera, logical channels, shared
+  capture ID, checksum, and file URI.
+- Replaceable camera profiles under `config/`.
 - Read-only `/api/v1/observatory/context` for OCS/TCS/telescope/dome/weather/guider visibility with unavailable/stale-ready semantics reserved.
 - `/api/v1/status/full` includes observatory context and latest exposure-record visibility.
 - Simulator adapter contract tests for detector, slit, and calibration behavior.
@@ -70,15 +82,14 @@ Implemented capabilities include:
 The repository intentionally does not yet implement:
 
 - multi-exposure sequence runner;
-- FITS writer or real file persistence;
-- durable DataProduct pipeline beyond current runtime/read-model contracts;
+- durable DataProduct database or archive pipeline;
 - OCS adapter;
 - TCS telescope control;
 - real TCS readiness integration;
 - telescope pointing, rotator, guider, dome, weather, or safety authority;
-- real B/G/R camera hardware control;
-- per-channel B/G/R exposure readiness/control;
-- slit monitor image backend beyond visible placeholders;
+- ZWO SDK hardware driver;
+- independent physical B/G/R cameras (the beta bridge intentionally shares one);
+- closed-loop guiding;
 - role-based authentication and operator/engineer permission separation;
 - real hardware communication protocols.
 
@@ -114,6 +125,36 @@ http://127.0.0.1:8000/ui/v7
 ```
 
 Use backend-served UI routes rather than opening HTML files directly. This keeps API calls, runtime scripts, and static assets on the same origin.
+
+## Camera profiles and data
+
+The default profile is:
+
+```text
+config/cameras.sim.json
+```
+
+It deliberately leaves both ZWO model and serial fields unset. Override it with:
+
+```powershell
+$env:ICS_BETA_CAMERA_CONFIG="C:\path\to\camera-profile.json"
+$env:ICS_BETA_DATA_ROOT="D:\observations\ics-beta"
+```
+
+`config/cameras.zwo.example.json` documents the fields to replace after the
+hardware is known. Selecting `driver: "zwo"` currently fails clearly at startup;
+it will only be activated after the SDK-specific driver and hardware-in-loop
+tests exist. Changing model, serial, dimensions, bit depth, gain, or preview
+exposure does not require UI changes.
+
+Simulation products are real local files, but their FITS metadata and
+ExposureRecord remain marked `SIMULATE=true` / `simulated=true`. The default
+output directory is ignored by Git:
+
+```text
+var/data/YYYYMMDD/<obs-id>/*.fits
+var/data/YYYYMMDD/<obs-id>/*-quicklook.png
+```
 
 ## Runtime defaults
 
@@ -158,6 +199,11 @@ GET  /api/v1/status
 GET  /api/v1/status/full
 GET  /api/v1/capabilities
 GET  /api/v1/observatory/context
+GET  /api/v1/cameras/status
+GET  /camera/slit/latest.jpg
+GET  /camera/b/latest.jpg
+GET  /camera/g/latest.jpg
+GET  /camera/r/latest.jpg
 
 GET  /api/v1/setup/context
 PUT  /api/v1/setup/context

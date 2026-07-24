@@ -3,17 +3,18 @@
 ## Snapshot
 
 ```text
-Project: JUST Long-Slit ICS 2.0
-Status: after Phase 2.9-E code closeout
-Validation: pytest -q -> 244 passed
-Current emphasis: stabilize exposure-record and read-only observatory context before workflow polish
+Project: ICS Beta
+Status: campus camera vertical slice implemented in simulation
+Validation: pytest -q -> 249 passed
+Current emphasis: preserve the ICS 2.0 UI and contracts while preparing ZWO driver replacement
 ```
 
 This file is a current-state snapshot. It is not a project diary. Historical details should be recovered from git history, not accumulated here.
 
 ## Current baseline
 
-ICS 2.0 currently provides a simulator-backed, API-driven instrument-control baseline for the JUST long-slit spectrograph.
+ICS Beta inherits the simulator-backed, API-driven ICS 2.0 baseline and adapts
+it to the campus telescope branch.
 
 The current working loop is:
 
@@ -21,9 +22,11 @@ The current working loop is:
 Setup/session context
   -> ObservationRequest / preview
   -> backend readiness gate
-  -> observation command
+  -> start science-camera exposure
+  -> finish or early stop/readout
   -> ObservationCommandFeedbackResponse
-  -> ExposureRecord / simulated DataProductRef
+  -> local FITS + PNG quicklook
+  -> ExposureRecord / available DataProductRef
   -> read-only ObservatoryContext
   -> v7 Observe summary + raw diagnostics
 ```
@@ -63,20 +66,21 @@ Established:
 
 ## Exposure Records
 
-Established in Phase 2.9-D:
+The beta branch now provides:
 
 - `ExposureRecord`, `FrameRecord`, `DataProductRef`, `FitsHeaderSummary`, and `QualityFlag`.
 - Latest exposure record attached to detector snapshots and observation metadata.
-- Completed simulator exposures produce simulated data-product and quicklook references.
+- Completed simulator exposures produce actual local FITS and PNG quicklook files.
 - Discarded exposures explicitly report `not_created` data-product state.
-- Current references do not claim that real FITS or quicklook files exist.
+- Products retain `simulated=true` provenance and `SIMULATE=true` FITS metadata.
+- Physical camera ID, B/G/R logical-channel aliases, and a shared capture ID are recorded.
 
 Important boundary:
 
 ```text
-Exposure completed does not mean a FITS file exists.
-Simulator data products are references only.
-Real file persistence remains a future writer/pipeline concern.
+Exposure completion only succeeds after the local FITS and quicklook writer returns.
+The files exist, but simulated pixels must never be presented as sky data.
+Archive/catalog persistence remains a future concern.
 ```
 
 ## Observatory Context
@@ -102,7 +106,7 @@ Current reported validation:
 
 ```text
 pytest -q
-244 passed
+249 passed
 ```
 
 This means code and tests are aligned with the current runtime/default route behavior.
@@ -113,18 +117,16 @@ The following are intentionally not part of the current baseline:
 
 - multi-exposure sequence runner;
 - observation plan executor;
-- FITS writer or real file persistence;
-- durable DataProduct pipeline beyond current runtime/read-model contracts;
+- durable DataProduct archive/catalog persistence;
 - durable ExposureRecord persistence beyond current runtime state;
 - OCS adapter;
 - TCS telescope control;
 - real TCS readiness integration;
 - telescope pointing, rotator, guiding, dome, or weather authority;
 - real hardware communication protocols;
-- real B/G/R camera exposure control;
-- per-channel B/G/R readiness/control;
-- slit monitor image backend;
-- quicklook/data watcher;
+- ZWO SDK science-camera and slit-camera drivers;
+- independent physical B/G/R camera control;
+- closed-loop guiding;
 - role-based authentication or operator/engineer permission enforcement.
 
 ## Current Phase Status
@@ -139,15 +141,17 @@ Phase 2.9-E  Read-only Observatory Context               closed
 
 ## Recommended Next Feature Phase
 
-Do not extend Phase 2.9-D/E with sequence or real-hardware scope.
+The next phase should begin only after the exact ZWO models, serial numbers, SDK
+version, supported pixel formats, and exposure/readout calls are known:
 
-Focused options:
+- implement SDK drivers behind the existing adapters;
+- add timeout, disconnect, abort, and reconnect contracts;
+- perform desk tests with each camera separately;
+- then perform telescope/spectrograph hardware-in-loop tests.
 
-- Phase 2.9-F Operator Workflow Polish: preset diff polish, diagnostics command/error polish, Observe exposure-record/data-product wording, and Housekeeping/Engineer boundaries.
-- Phase 3.0 Observation Plan / Sequence Contract: observation plan, sequence preview, execution state, pause/abort/recover semantics.
-- Phase 4.0 Real Hardware Adapter Hardening: detector/slit/calibration adapter parity expansion, timeout/disconnect/recovery contracts, and hardware-in-loop tests.
-
-Avoid starting a sequence runner until the current ExposureRecord/DataProductRef contract is accepted as the baseline.
+The manually selected grating, fixed nominal 25 µm slit, and second Nasmyth
+visual optical path remain observing metadata/operational facts, not software
+control responsibilities in this beta phase.
 
 ## Engineering Cautions
 
@@ -155,8 +159,8 @@ Avoid starting a sequence runner until the current ExposureRecord/DataProductRef
 - Do not present placeholder telemetry as real.
 - Do not add telescope write-control inside ICS without an OCS/TCS contract.
 - Do not introduce a database just because persistence will eventually matter.
-- Do not turn B/G/R summary into fake per-channel readiness/control.
-- Do not imply simulator data-product references are real FITS files.
+- Do not imply that B/G/R aliases are three physical cameras.
+- Do not imply that simulated FITS files contain sky data.
 - Do not keep appending history to this document. Rewrite the snapshot when the phase changes.
 
 ## Documentation State

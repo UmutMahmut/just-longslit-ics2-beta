@@ -43,7 +43,8 @@ def test_management_service_detector_config_roundtrip():
     service = ManagementService(runtime)
 
     default_cfg = service.get_detector_config_dict()
-    assert default_cfg["profile_name"] == "default"
+    assert default_cfg["profile_name"] == "campus-beta-shared-camera"
+    assert default_cfg["shared_physical_camera"] is True
 
     updated = service.set_detector_config(
         {

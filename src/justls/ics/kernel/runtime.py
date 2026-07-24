@@ -4,16 +4,28 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+from justls.ics.adapters.camera.adapter import SimPreviewCameraAdapter
 from justls.ics.adapters.detector.adapter import SimDetectorAdapter
 from justls.ics.adapters.lamps.adapter import SimCalibrationAdapter
 from justls.ics.adapters.slit.adapter import SimSlitAdapter
-from justls.ics.domain.detector.config import DetectorConfig, build_default_detector_config
+from justls.ics.domain.detector.config import (
+    DetectorConfig,
+    build_beta_detector_config,
+    build_default_detector_config,
+)
 from justls.ics.domain.detector.subsystem import DetectorSubsystem
 from justls.ics.domain.lamps.subsystem import CalibrationSubsystem
 from justls.ics.domain.slit.subsystem import SlitSubsystem
+from justls.ics.drivers.sim.camera_driver import SimPreviewCameraDriver
 from justls.ics.drivers.sim.detector_driver import SimDetectorDriver
 from justls.ics.drivers.sim.lamp_driver import SimCalibrationDriver
 from justls.ics.drivers.sim.slit_driver import SimSlitDriver
+from justls.ics.infra.camera_config import (
+    CameraSystemConfig,
+    load_camera_system_config,
+    resolve_data_root,
+)
+from justls.ics.infra.data_products import LocalDataProductWriter
 from justls.ics.kernel.errors import ICSException
 from justls.ics.kernel.jobs import CommandRequest, JobRecord, JobTracker
 from justls.ics.kernel.states import (
@@ -33,9 +45,10 @@ def utc_now() -> datetime:
 @dataclass(slots=True)
 class RuntimeConfig:
     run_mode: RunMode = RunMode.SIM
-    app_name: str = "JUST Long-Slit ICS 2.0"
-    version: str = "0.0.1"
+    app_name: str = "ICS Beta"
+    version: str = "0.1.0"
     telemetry_enabled: bool = False
+    camera_config_path: str | None = None
 
 
 @dataclass(slots=True)
@@ -45,6 +58,10 @@ class Runtime:
     slit: SlitSubsystem | None = None
     lamps: CalibrationSubsystem | None = None
     detector: DetectorSubsystem | None = None
+    slit_camera: SimPreviewCameraAdapter | None = None
+    camera_config: CameraSystemConfig | None = None
+    camera_config_path: str | None = None
+    data_root: str | None = None
     detector_config: DetectorConfig = field(default_factory=build_default_detector_config)
     job_tracker: JobTracker = field(default_factory=JobTracker)
     started_at: datetime = field(default_factory=utc_now)
@@ -74,10 +91,40 @@ class Runtime:
             "slit_angle": self.slit is not None,
             "calib_lamps": self.lamps is not None,
             "rotator": False,
-            "slit_monitor_camera": False,
+            "slit_monitor_camera": self.slit_camera is not None,
             "guider": False,
-            "science_channels_bgr": False,
+            "science_channels_bgr": self.detector is not None,
             "fast_photometry": False,
+        }
+
+    def get_camera_status_dict(self) -> dict[str, Any]:
+        science = (
+            self.detector.adapter.get_status()
+            if self.detector is not None
+            else None
+        )
+        slit = self.slit_camera.get_status() if self.slit_camera is not None else None
+        return {
+            "profile_name": (
+                self.camera_config.profile_name if self.camera_config else None
+            ),
+            "config_path": self.camera_config_path,
+            "data_root": self.data_root,
+            "science_camera": science,
+            "slit_camera": slit,
+            "bridge": {
+                "physical_camera_id": (
+                    self.camera_config.science_camera.device_id
+                    if self.camera_config
+                    else None
+                ),
+                "logical_channels": (
+                    list(self.camera_config.logical_science_channels)
+                    if self.camera_config
+                    else []
+                ),
+                "shared_capture": True,
+            },
         }
 
     def get_detector_config(self) -> DetectorConfig:
@@ -272,10 +319,17 @@ class RuntimeAssembler:
 
     def build(self) -> Runtime:
         state = build_initial_state(self.config.run_mode)
+        camera_config, camera_config_path = load_camera_system_config(
+            self.config.camera_config_path
+        )
+        data_root = resolve_data_root(camera_config, camera_config_path)
+        self._camera_config = camera_config
+        self._data_root = data_root
 
         slit_subsystem = self._build_slit_subsystem()
         lamps_subsystem = self._build_lamps_subsystem()
         detector_subsystem = self._build_detector_subsystem()
+        slit_camera = self._build_slit_camera()
 
         runtime = Runtime(
             config=self.config,
@@ -283,7 +337,13 @@ class RuntimeAssembler:
             slit=slit_subsystem,
             lamps=lamps_subsystem,
             detector=detector_subsystem,
-            detector_config=build_default_detector_config(),
+            slit_camera=slit_camera,
+            camera_config=camera_config,
+            camera_config_path=str(camera_config_path),
+            data_root=str(data_root),
+            detector_config=build_beta_detector_config(
+                camera_config.science_camera.device_id
+            ),
         )
 
         runtime.set_subsystem_connected("system", True, message="runtime assembled")
@@ -337,11 +397,33 @@ class RuntimeAssembler:
 
     def _build_detector_subsystem(self) -> DetectorSubsystem | None:
         if self.config.run_mode == RunMode.SIM:
-            driver = SimDetectorDriver()
-            adapter = SimDetectorAdapter(driver)
+            if self._camera_config.science_camera.driver != "simulated":
+                raise NotImplementedError(
+                    "The selected science-camera profile requires a ZWO driver; "
+                    "use cameras.sim.json until that driver is implemented."
+                )
+            driver = SimDetectorDriver(self._camera_config.science_camera)
+            adapter = SimDetectorAdapter(
+                driver,
+                writer=LocalDataProductWriter(self._data_root),
+                logical_channels=tuple(
+                    self._camera_config.logical_science_channels
+                ),
+            )
             return DetectorSubsystem(adapter=adapter)
 
         raise NotImplementedError("HW detector adapter is not implemented yet.")
+
+    def _build_slit_camera(self) -> SimPreviewCameraAdapter | None:
+        if self.config.run_mode == RunMode.SIM:
+            if self._camera_config.slit_camera.driver != "simulated":
+                raise NotImplementedError(
+                    "The selected slit-camera profile requires a ZWO driver; "
+                    "use cameras.sim.json until that driver is implemented."
+                )
+            driver = SimPreviewCameraDriver(self._camera_config.slit_camera)
+            return SimPreviewCameraAdapter(driver)
+        raise NotImplementedError("HW slit camera adapter is not implemented yet.")
 
 
 _default_runtime: Runtime | None = None

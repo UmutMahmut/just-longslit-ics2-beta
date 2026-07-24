@@ -42,8 +42,8 @@ def test_runtime_status_dict():
     runtime = RuntimeAssembler(RuntimeConfig(run_mode=RunMode.SIM)).build()
     status = runtime.status_dict()
 
-    assert status["app_name"] == "JUST Long-Slit ICS 2.0"
-    assert status["version"] == "0.0.1"
+    assert status["app_name"] == "ICS Beta"
+    assert status["version"] == "0.1.0"
     assert status["run_mode"] == "sim"
     assert status["latest_job"] is None
 
@@ -57,17 +57,24 @@ def test_runtime_has_slit_lamps_detector_and_capabilities():
     assert caps["slit"] is True
     assert caps["slit_angle"] is True
     assert caps["calib_lamps"] is True
+    assert caps["slit_monitor_camera"] is True
+    assert caps["science_channels_bgr"] is True
 
 def test_runtime_default_detector_config_exists():
     runtime = RuntimeAssembler().build()
     cfg = runtime.get_detector_config_dict()
 
-    assert cfg["profile_name"] == "default"
+    assert cfg["profile_name"] == "campus-beta-shared-camera"
     assert cfg["save_enabled"] is True
-    assert cfg["trigger_mode"] == "internal"
+    assert cfg["trigger_mode"] == "simulated"
     assert cfg["readout_mode"] == "normal"
+    assert cfg["shared_physical_camera"] is True
     assert "channels" in cfg
     assert set(cfg["channels"].keys()) == {"B", "G", "R"}
+    assert all(channel["enabled"] for channel in cfg["channels"].values())
+    assert {
+        channel["source_camera_id"] for channel in cfg["channels"].values()
+    } == {"science-camera-01"}
 
 def test_runtime_can_update_detector_config():
     runtime = RuntimeAssembler().build()

@@ -38,6 +38,7 @@ class ExposureSnapshot:
     last_exposure: dict | None
     observation_meta: dict | None
     latest_exposure_record: dict | None
+    camera_status: dict | None
 
     def to_dict(self) -> dict:
         return {
@@ -46,6 +47,7 @@ class ExposureSnapshot:
             "last_exposure": self.last_exposure,
             "observation_meta": self.observation_meta,
             "latest_exposure_record": self.latest_exposure_record,
+            "camera_status": self.camera_status,
         }
 
 
@@ -65,6 +67,7 @@ class DetectorSubsystem:
             last_exposure=self._last_exposure,
             observation_meta=self._observation_meta.to_dict() if self._observation_meta is not None else None,
             latest_exposure_record=self._latest_exposure_record,
+            camera_status=self.adapter.get_status(),
         )
 
     def arm(
@@ -133,6 +136,12 @@ class DetectorSubsystem:
                 details={"state": self._state.value},
             )
 
+        self.adapter.start_exposure(
+            obs_id=self._armed.obs_id,
+            exp_id=self._armed.exp_id,
+            exp_time_s=self._armed.exp_time_s,
+            frame_type=self._armed.frame_type,
+        )
         self._state = ExposureState.EXPOSING
         self._observation_meta.mark_exposing()
         return self.get_snapshot()
@@ -145,39 +154,7 @@ class DetectorSubsystem:
                 details={"state": self._state.value},
             )
 
-        self._state = ExposureState.READING_OUT
-
-        result = self.adapter.acquire_exposure(
-            obs_id=self._armed.obs_id,
-            exp_time_s=self._armed.exp_time_s,
-            frame_type=self._armed.frame_type,
-        )
-
-        frame_result = FrameResult(
-            frame_token=result.get("frame_token"),
-            file_uri=result.get("file_uri"),
-            kept=True,
-            early_stop=True,
-            discarded=False,
-            checksum=result.get("checksum"),
-            started_at_utc=result.get("started_at"),
-            finished_at_utc=result.get("finished_at"),
-            result="completed",
-        )
-
-        result["kept"] = True
-        result["early_stop"] = True
-        result["discarded"] = False
-        result["exp_id"] = self._armed.exp_id
-        result["operator_note"] = self._armed.operator_note
-
-        self._last_exposure = result
-        self._observation_meta.add_frame_result(frame_result)
-        self._observation_meta.mark_completed(finished_at_utc=result.get("finished_at"))
-        self._attach_latest_exposure_record(frame_result)
-        self._armed = None
-        self._state = ExposureState.COMPLETED
-        return self.get_snapshot()
+        return self._complete_exposure(early_stop=True)
 
     def finish_normal(self) -> ExposureSnapshot:
         if self._state != ExposureState.EXPOSING or self._armed is None or self._observation_meta is None:
@@ -187,34 +164,52 @@ class DetectorSubsystem:
                 details={"state": self._state.value},
             )
 
+        return self._complete_exposure(early_stop=False)
+
+    def _complete_exposure(self, *, early_stop: bool) -> ExposureSnapshot:
+        if self._armed is None or self._observation_meta is None:
+            raise InvalidStateError(
+                "no active exposure is available for readout",
+                subsystem="detector",
+                details={"state": self._state.value},
+            )
         self._state = ExposureState.READING_OUT
-
-        result = self.adapter.acquire_exposure(
-            obs_id=self._armed.obs_id,
-            exp_time_s=self._armed.exp_time_s,
-            frame_type=self._armed.frame_type,
+        result = (
+            self.adapter.stop_exposure_and_readout()
+            if early_stop
+            else self.adapter.finish_exposure()
         )
-
         frame_result = FrameResult(
             frame_token=result.get("frame_token"),
             file_uri=result.get("file_uri"),
             kept=True,
-            early_stop=False,
+            early_stop=early_stop,
             discarded=False,
             checksum=result.get("checksum"),
             started_at_utc=result.get("started_at"),
             finished_at_utc=result.get("finished_at"),
             result="completed",
+            quicklook_uri=result.get("quicklook_uri"),
+            exists=bool(result.get("exists")),
+            simulated=bool(result.get("simulated", False)),
+            physical_camera_id=result.get("physical_camera_id"),
+            logical_channels=tuple(result.get("logical_channels") or ()),
+            shared_capture_id=result.get("shared_capture_id"),
         )
-
-        result["kept"] = True
-        result["early_stop"] = False
-        result["discarded"] = False
-        result["exp_id"] = self._armed.exp_id
-
+        result.update(
+            {
+                "kept": True,
+                "early_stop": early_stop,
+                "discarded": False,
+                "exp_id": self._armed.exp_id,
+                "operator_note": self._armed.operator_note,
+            }
+        )
         self._last_exposure = result
         self._observation_meta.add_frame_result(frame_result)
-        self._observation_meta.mark_completed(finished_at_utc=result.get("finished_at"))
+        self._observation_meta.mark_completed(
+            finished_at_utc=result.get("finished_at")
+        )
         self._attach_latest_exposure_record(frame_result)
         self._armed = None
         self._state = ExposureState.COMPLETED
@@ -229,6 +224,8 @@ class DetectorSubsystem:
             )
 
         finished_at = utc_now_iso()
+        if self._state == ExposureState.EXPOSING:
+            self.adapter.abort_exposure()
 
         frame_result = FrameResult(
             frame_token=None,

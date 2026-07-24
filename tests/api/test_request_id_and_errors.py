@@ -129,7 +129,11 @@ def test_api_validation_error_includes_request_id_header():
 def test_api_internal_error_includes_request_id_header_and_detail():
     route_path = "/api/v1/_test/internal-error-request-id"
 
-    existing_paths = {route.path for route in app.router.routes}
+    existing_paths = {
+        route.path
+        for route in app.router.routes
+        if hasattr(route, "path")
+    }
     if route_path not in existing_paths:
         @app.get(route_path, include_in_schema=False)
         def _test_internal_error_request_id():

@@ -1,0 +1,31 @@
+{
+  "profile_name": "campus-beta-zwo-template",
+  "data_root": "var/data",
+  "logical_science_channels": ["B", "G", "R"],
+  "science_camera": {
+    "device_id": "science-camera-01",
+    "role": "science",
+    "driver": "zwo",
+    "manufacturer": "ZWO",
+    "model": "REPLACE_WHEN_KNOWN",
+    "serial": "REPLACE_WHEN_KNOWN",
+    "width": 640,
+    "height": 480,
+    "bit_depth": 16,
+    "gain": 100,
+    "preview_exposure_ms": 500
+  },
+  "slit_camera": {
+    "device_id": "slit-camera-01",
+    "role": "slit",
+    "driver": "zwo",
+    "manufacturer": "ZWO",
+    "model": "REPLACE_WHEN_KNOWN",
+    "serial": "REPLACE_WHEN_KNOWN",
+    "width": 640,
+    "height": 480,
+    "bit_depth": 8,
+    "gain": 100,
+    "preview_exposure_ms": 100
+  }
+}

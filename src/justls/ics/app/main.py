@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from justls.ics.app.api.errors import build_api_error_detail
+from justls.ics.app.api.routers.cameras import router as cameras_router
 from justls.ics.app.api.routers.detector import router as detector_router
 from justls.ics.app.api.routers.health import router as health_router
 from justls.ics.app.api.routers.lamps import router as lamps_router
@@ -23,9 +24,9 @@ from justls.ics.app.api.routers.slit import router as slit_router
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="JUST Long-Slit ICS 2.0",
-    version="0.0.1",
-    description="Rebuilt internal control kernel for JUST long-slit spectrograph ICS.",
+    title="ICS Beta",
+    version="0.1.0",
+    description="Campus telescope camera and long-slit workflow integration branch.",
 )
 
 
@@ -100,6 +101,7 @@ app.include_router(observation_router)
 app.include_router(observatory_router)
 app.include_router(detector_router)
 app.include_router(presets_router)
+app.include_router(cameras_router)
 
 UI_DIR = Path(__file__).resolve().parent / "ui"
 UI_ENTRY = UI_DIR / "ui_alpha_skeleton_v5.html"
@@ -112,6 +114,7 @@ UI_V7_INSTRUMENT_RUNTIME = "/ui-assets/v7/instrument_runtime.js"
 UI_V7_PRESET_RUNTIME = "/ui-assets/v7/preset_runtime.js"
 UI_V7_OBSERVE_RUNTIME = "/ui-assets/v7/observe_runtime.js"
 UI_V7_OBSERVE_GUARD = "/ui-assets/v7/observe_guard.js"
+UI_V7_CAMERA_RUNTIME = "/ui-assets/v7/camera_runtime.js"
 
 PHASE_2D6_V5_ADAPTER_ENABLED_ENV = "JUSTLS_UI_PHASE2D6_ADAPTER_ENABLED"
 PHASE_2D6_V6_ENABLED_ENV = "JUSTLS_UI_V6_ENABLED"
@@ -222,6 +225,7 @@ def phase_2d8_v7_runtime_scripts() -> tuple[str, ...]:
         scripts.append(UI_V7_OBSERVE_RUNTIME)
     if flags["observe_guard"]:
         scripts.append(UI_V7_OBSERVE_GUARD)
+    scripts.append(UI_V7_CAMERA_RUNTIME)
     return tuple(scripts)
 
 
@@ -270,7 +274,7 @@ def serve_html(
 @app.get("/")
 def read_root() -> dict:
     return {
-        "message": "JUST Long-Slit ICS 2.0 is running.",
+        "message": "ICS Beta is running.",
         "docs": "/docs",
         "openapi": "/openapi.json",
         "ui": "/ui" if UI_V7_ENTRY.exists() and phase_2d8_v7_enabled() else ("/ui/v5" if UI_ENTRY.exists() else None),

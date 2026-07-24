@@ -49,3 +49,6 @@ tmp_check.py
 *.egg-info/
 build/
 dist/
+
+# ICS_beta generated FITS and quicklook products
+var/

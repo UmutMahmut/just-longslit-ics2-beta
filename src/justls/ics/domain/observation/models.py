@@ -48,6 +48,12 @@ class FrameResult:
     started_at_utc: str | None
     finished_at_utc: str | None
     result: str
+    quicklook_uri: str | None = None
+    exists: bool = False
+    simulated: bool = True
+    physical_camera_id: str | None = None
+    logical_channels: tuple[str, ...] = ()
+    shared_capture_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -60,6 +66,12 @@ class FrameResult:
             "started_at_utc": self.started_at_utc,
             "finished_at_utc": self.finished_at_utc,
             "result": self.result,
+            "quicklook_uri": self.quicklook_uri,
+            "exists": self.exists,
+            "simulated": self.simulated,
+            "physical_camera_id": self.physical_camera_id,
+            "logical_channels": list(self.logical_channels),
+            "shared_capture_id": self.shared_capture_id,
         }
 
 
@@ -96,6 +108,32 @@ class DataProductRef(BaseModel):
     checksum: str | None = None
     created_at_utc: str | None = None
     message: str | None = None
+
+    @classmethod
+    def available_file(
+        cls,
+        *,
+        kind: DataProductKind,
+        uri: str,
+        media_type: str,
+        checksum: str | None = None,
+        simulated: bool = False,
+    ) -> "DataProductRef":
+        return cls(
+            kind=kind,
+            state=DataProductState.AVAILABLE,
+            uri=uri,
+            exists=True,
+            simulated=simulated,
+            media_type=media_type,
+            checksum=checksum,
+            created_at_utc=utc_now_iso(),
+            message=(
+                "File written by the simulated camera pipeline."
+                if simulated
+                else "File written by the camera pipeline."
+            ),
+        )
 
     @classmethod
     def simulated_fits(
@@ -168,7 +206,11 @@ class FitsHeaderSummary(BaseModel):
     cards: dict[str, Any] = Field(default_factory=dict)
 
     @classmethod
-    def from_observation_meta(cls, observation_meta: Any) -> "FitsHeaderSummary":
+    def from_observation_meta(
+        cls,
+        observation_meta: Any,
+        frame_result: FrameResult | None = None,
+    ) -> "FitsHeaderSummary":
         detector_config = observation_meta.detector_config or {}
         setup_context = observation_meta.setup_context or {}
         detector_profile = (
@@ -181,6 +223,22 @@ class FitsHeaderSummary(BaseModel):
             if isinstance(setup_context, dict)
             else None
         )
+        simulated = frame_result.simulated if frame_result is not None else True
+        cards: dict[str, Any] = {
+            "OBS_ID": observation_meta.obs_id,
+            "EXP_ID": observation_meta.exp_id,
+            "FRAMETYP": observation_meta.frame_type,
+            "EXPTIME": observation_meta.exp_time_s,
+            "SIMULATE": simulated,
+        }
+        if frame_result is not None:
+            cards.update(
+                {
+                    "CAMERA": frame_result.physical_camera_id,
+                    "SHARED": bool(frame_result.shared_capture_id),
+                    "CHANNELS": ",".join(frame_result.logical_channels),
+                }
+            )
         return cls(
             obs_id=observation_meta.obs_id,
             exp_id=observation_meta.exp_id,
@@ -188,13 +246,7 @@ class FitsHeaderSummary(BaseModel):
             exp_time_s=observation_meta.exp_time_s,
             detector_profile=detector_profile,
             setup_file_stem=setup_file_stem,
-            cards={
-                "OBS_ID": observation_meta.obs_id,
-                "EXP_ID": observation_meta.exp_id,
-                "FRAMETYP": observation_meta.frame_type,
-                "EXPTIME": observation_meta.exp_time_s,
-                "SIMULATE": True,
-            },
+            cards=cards,
         )
 
 
@@ -217,6 +269,9 @@ class FrameRecord(BaseModel):
     quicklook: DataProductRef | None = None
     fits_header: FitsHeaderSummary | None = None
     quality_flags: list[QualityFlag] = Field(default_factory=list)
+    physical_camera_id: str | None = None
+    logical_channels: list[str] = Field(default_factory=list)
+    shared_capture_id: str | None = None
 
 
 class ExposureRecord(BaseModel):
@@ -239,6 +294,9 @@ class ExposureRecord(BaseModel):
     quality_flags: list[QualityFlag] = Field(default_factory=list)
     simulated: bool = True
     message: str | None = None
+    physical_camera_id: str | None = None
+    logical_channels: list[str] = Field(default_factory=list)
+    shared_capture_id: str | None = None
 
     @classmethod
     def from_frame_result(
@@ -248,9 +306,14 @@ class ExposureRecord(BaseModel):
         frame_result: FrameResult,
     ) -> "ExposureRecord":
         discarded = frame_result.discarded or not frame_result.kept
-        fits_header = FitsHeaderSummary.from_observation_meta(observation_meta)
+        fits_header = FitsHeaderSummary.from_observation_meta(
+            observation_meta,
+            frame_result,
+        )
 
-        flags = [QualityFlag.SIMULATED]
+        flags: list[QualityFlag] = []
+        if frame_result.simulated:
+            flags.append(QualityFlag.SIMULATED)
         if frame_result.early_stop:
             flags.append(QualityFlag.EARLY_STOP)
         if discarded:
@@ -266,7 +329,28 @@ class ExposureRecord(BaseModel):
             quicklook = None
             state = "discarded"
             message = "Exposure discarded; data product intentionally absent."
+        elif frame_result.file_uri and frame_result.exists:
+            data_product = DataProductRef.available_file(
+                kind=DataProductKind.FITS,
+                uri=frame_result.file_uri,
+                media_type="application/fits",
+                checksum=frame_result.checksum,
+                simulated=frame_result.simulated,
+            )
+            quicklook = (
+                DataProductRef.available_file(
+                    kind=DataProductKind.QUICKLOOK,
+                    uri=frame_result.quicklook_uri,
+                    media_type="image/png",
+                    simulated=frame_result.simulated,
+                )
+                if frame_result.quicklook_uri
+                else None
+            )
+            state = "completed"
+            message = "Exposure completed and local data products were written."
         else:
+            flags.append(QualityFlag.NO_FITS_WRITER)
             data_product = DataProductRef.simulated_fits(
                 obs_id=observation_meta.obs_id,
                 exp_id=observation_meta.exp_id,
@@ -300,6 +384,9 @@ class ExposureRecord(BaseModel):
             quicklook=quicklook,
             fits_header=fits_header,
             quality_flags=flags,
+            physical_camera_id=frame_result.physical_camera_id,
+            logical_channels=list(frame_result.logical_channels),
+            shared_capture_id=frame_result.shared_capture_id,
         )
 
         return cls(
@@ -317,8 +404,11 @@ class ExposureRecord(BaseModel):
             quicklook=quicklook,
             fits_header=fits_header,
             quality_flags=flags,
-            simulated=True,
+            simulated=frame_result.simulated,
             message=message,
+            physical_camera_id=frame_result.physical_camera_id,
+            logical_channels=list(frame_result.logical_channels),
+            shared_capture_id=frame_result.shared_capture_id,
         )
 
 

@@ -37,10 +37,14 @@ def test_observation_finish_returns_latest_exposure_record() -> None:
 
     record = payload["latest_exposure_record"]
     assert record["state"] == "completed"
-    assert record["data_product_state"] == "simulated_reference"
-    assert record["primary_data_product"]["exists"] is False
+    assert record["data_product_state"] == "available"
+    assert record["primary_data_product"]["exists"] is True
     assert record["primary_data_product"]["simulated"] is True
-    assert record["primary_data_product"]["uri"].startswith("sim://justls/")
+    assert record["primary_data_product"]["uri"].startswith("file:///")
+    assert record["quicklook"]["exists"] is True
+    assert record["quicklook"]["uri"].startswith("file:///")
+    assert record["logical_channels"] == ["B", "G", "R"]
+    assert record["shared_capture_id"].startswith("frame-")
     assert payload["observation_meta"]["exposure_record"]["record_id"] == record["record_id"]
 
 
@@ -59,9 +63,11 @@ def test_status_full_exposes_latest_exposure_record_after_completion() -> None:
     record = status.json()["observation"]["latest_exposure_record"]
 
     assert record["state"] == "completed"
-    assert record["data_product_state"] == "simulated_reference"
-    assert record["primary_data_product"]["exists"] is False
+    assert record["data_product_state"] == "available"
+    assert record["primary_data_product"]["exists"] is True
     assert record["fits_header"]["cards"]["SIMULATE"] is True
+    assert record["fits_header"]["cards"]["SHARED"] is True
+    assert record["fits_header"]["cards"]["CHANNELS"] == "B,G,R"
 
 
 def test_abort_discard_returns_record_without_data_product() -> None:
@@ -81,4 +87,3 @@ def test_abort_discard_returns_record_without_data_product() -> None:
     assert record["data_product_state"] == "not_created"
     assert record["primary_data_product"]["exists"] is False
     assert record["primary_data_product"]["uri"] is None
-
