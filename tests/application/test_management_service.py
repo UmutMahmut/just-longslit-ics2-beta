@@ -49,7 +49,6 @@ def test_management_service_detector_config_roundtrip():
     updated = service.set_detector_config(
         {
             "profile_name": "rgb-safe-default",
-            "save_enabled": True,
             "trigger_mode": "internal",
             "readout_mode": "normal",
             "channels": {

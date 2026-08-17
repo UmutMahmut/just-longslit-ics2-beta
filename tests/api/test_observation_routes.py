@@ -77,7 +77,6 @@ def test_api_observation_arm_includes_detector_config():
         "/api/v1/detector/config",
         json={
             "profile_name": "rgb-safe-default",
-            "save_enabled": True,
             "trigger_mode": "internal",
             "readout_mode": "normal",
             "channels": {
@@ -161,6 +160,39 @@ def test_api_observation_finish():
     assert len(payload["observation_meta"]["frame_results"]) == 1
     assert payload["observation_meta"]["frame_results"][0]["kept"] is True
     assert payload["observation_meta"]["frame_results"][0]["early_stop"] is False
+    assert payload["latest_exposure_record"]["save_requested"] is False
+    assert payload["latest_exposure_record"]["data_product_state"] == "not_requested"
+
+
+def test_api_saved_single_exposure_consumes_one_frame_index() -> None:
+    client = TestClient(app)
+    setup = client.put(
+        "/api/v1/setup/context",
+        json={"root_name": "science", "date_prefix": "20260817", "next_frame_index": 10},
+    )
+    assert setup.status_code == 200
+
+    unsaved_arm = client.post(
+        "/api/v1/observation/arm",
+        json={"exp_time_s": 0.1, "frame_type": "test"},
+    )
+    assert unsaved_arm.status_code == 200
+    assert client.get("/api/v1/setup/context").json()["next_frame_index"] == 10
+    assert client.post("/api/v1/observation/start").status_code == 200
+    assert client.post("/api/v1/observation/finish").status_code == 200
+
+    saved_arm = client.post(
+        "/api/v1/observation/arm",
+        json={"exp_time_s": 0.1, "frame_type": "science", "save_requested": True},
+    )
+    assert saved_arm.status_code == 200
+    saved_payload = saved_arm.json()["details"]["payload"]
+    assert saved_payload["armed_exposure"]["save_requested"] is True
+    assert saved_payload["observation_meta"]["data_preview"]["file_stem"] == "science_20260817_0010"
+    assert client.get("/api/v1/setup/context").json()["next_frame_index"] == 11
+    assert client.post("/api/v1/observation/start").status_code == 200
+    finished = client.post("/api/v1/observation/finish").json()["details"]["payload"]
+    assert finished["latest_exposure_record"]["data_product_state"] == "available"
 
 
 def test_api_observation_stop_readout():

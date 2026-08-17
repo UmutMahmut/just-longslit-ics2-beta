@@ -34,7 +34,12 @@ def test_observation_service_attaches_setup_context_to_arm_request() -> None:
         setup_context_service=setup_service,
     )
 
-    service.arm(exp_time_s=30.0, frame_type="science", operator_note="note")
+    service.arm(
+        exp_time_s=30.0,
+        frame_type="science",
+        operator_note="note",
+        save_requested=True,
+    )
 
     assert dispatcher.request is not None
     params = dispatcher.request.params
@@ -56,3 +61,4 @@ def test_observation_service_attaches_setup_context_to_arm_request() -> None:
         "fits_filename": "science_20260527_0005.fits",
         "data_directory": "/data/just",
     }
+    assert setup_service.get_context().next_frame_index == 6

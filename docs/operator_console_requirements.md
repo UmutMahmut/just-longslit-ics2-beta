@@ -2,7 +2,8 @@
 
 ## Purpose
 
-This document defines durable requirements for the JUST Long-Slit ICS operator console.
+This document defines durable requirements for the active ICS Beta operator
+console. Historical ICS repositories are reference material only.
 
 It should capture:
 
@@ -94,16 +95,23 @@ Instrument / Configure may expose operator controls only when backend/API contra
 Responsibility:
 
 - single-exposure operation;
+- mutually exclusive Single Exposure and Sequence modes for the science acquisition path;
 - exposure time, frame type, operator note;
+- explicit Save FITS + Quicklook choice, default off and frozen during acquisition;
 - preview readiness/validation visibility;
 - arm/start/finish/stop-readout/abort-discard command path;
 - clear notice that the current baseline requires explicit Finish or Stop & Readout after Start;
 - command feedback summary;
 - latest exposure record and data-product reference summary;
-- latest preview/placeholder image areas.
+- three B/G/R science image panes showing the latest completed acquisition; during beta all three are explicitly marked as one shared science-camera source, with no separate science Preview mode;
 - multi-exposure plan entry, preview, load, progress, pause/resume, and abort controls.
+- durable sequence save/restore visibility and explicit Retry Current Step / Mark Failed recovery actions.
+- independent slit/guide continuous Preview, default on, stoppable, and never persisted.
 
-Sequence controls must remain visibly operator-stepped until unattended execution and restart recovery contracts exist. An active sequence owns the detector command path; backend guards must reject competing direct exposure commands.
+Sequence controls remain visibly operator-stepped. An active or
+`recovery_required` sequence owns the detector command path; backend guards must
+reject competing direct exposure commands. Recovery actions must show whether
+Retry is allowed and require explicit confirmation for terminal Mark Failed.
 
 ### Presets
 
@@ -217,7 +225,8 @@ Do not copy Blue/Red two-channel assumptions from other instruments.
 
 Until real B/G/R hardware contracts exist:
 
-- show B/G/R as honest summary;
+- preserve the three-pane B/G/R science-image layout expected by the final instrument;
+- explicitly mark that all three panes currently mirror one shared science-camera beta feed;
 - do not fake per-channel exposure readiness;
 - do not fake per-channel telemetry;
 - do not expose per-channel write controls as if they were real.
@@ -266,13 +275,9 @@ Blocking validation belongs to backend preview/gate contracts, not frontend-only
 
 ### Slit monitor / guider
 
-Slit monitor is a first-class subsystem concept.
-
-Until image backend contracts exist:
-
-- keep visible placeholders;
-- label unavailable/demo/not wired honestly;
-- do not remove the concept from the operator console.
+Slit monitor is a first-class, preview-only subsystem concept. It has independent
+start, stop, status, and latest-frame contracts, remains active during science
+acquisition, and does not expose single-frame save or data-product controls.
 
 ### OCS/TCS and observatory context
 
@@ -313,10 +318,11 @@ Unavailable or stale context must be shown honestly.
 | Observation status | `/observation/status` | Observe, Diagnostics | visible status | Current-state endpoint. |
 | Observation preview | `/observation/preview` | Observe | advisory | Side-effect-free. |
 | Observation commands | `/observation/arm/start/finish/stop_readout/abort_discard` | Observe | operator control | Returns command feedback. |
-| B/G/R channels | detector/config summary only | Instrument / Configure | visible placeholder/status | No fake telemetry. |
+| Slit/guide Preview | `/cameras/slit/preview/*`, `/camera/slit/latest.jpg` | Observe | operator control | Default on, independent from science acquisition, never persisted. |
+| B/G/R channels | detector/config summary plus `/camera/{b|g|r}/latest.jpg` beta aliases | Instrument / Configure, Observe | visible summary / science panes | Preserve three-pane topology; mark the shared beta source and do not fake independent telemetry. |
 | TCS/observatory | `GET /observatory/context`, `/status/full` | future Setup/Observe/Diagnostics | visible placeholder/status | Read-only and unavailable by default; no telescope control. |
-| Data products | `latest_exposure_record` on observation/status payloads | Diagnostics/Observe | visible status | Local FITS/PNG files exist in simulation and remain explicitly marked simulated. |
-| Observation sequence | `/observation/sequence/*` | Observe, Diagnostics | operator control | In-memory, operator-stepped, auditable; no unattended auto-advance or restart recovery. |
+| Data products | `latest_exposure_record` on observation/status payloads | Diagnostics/Observe | visible status | `not_requested` when Save is off; local simulated FITS/PNG when Save is on. |
+| Observation sequence | `/observation/sequence/*` | Observe, Diagnostics | operator control | Durable JSON, operator-stepped, auditable, conservative restart reconciliation; no unattended auto-advance. |
 | Engineer controls | not implemented | Engineer | deferred | Future role gating. |
 
 ## Reference usage
@@ -376,16 +382,16 @@ The following remain deferred:
 
 - unattended/background sequence execution;
 - timer-driven automatic exposure completion/readout;
-- durable observing-plan persistence and restart recovery;
+- automatic observing-plan retry/resume and unattended restart continuation;
 - full visual plan editor and per-step automatic reconfiguration;
 - durable DataProduct pipeline beyond current data-product reference contract;
 - quicklook/data watcher;
 - real B/G/R camera control;
-- slit monitor image backend;
+- real slit/guide camera driver and background frame buffer;
 - real observatory/TCS integration beyond unavailable read-only placeholders;
 - OCS adapter;
 - auth/role model;
-- engineer recovery controls.
+- low-level engineer hardware-recovery controls beyond sequence Retry/Abort/Mark Failed.
 
 A deferred requirement may remain visible as a placeholder only if it is clearly labeled.
 

@@ -40,7 +40,6 @@ class DetectorConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     profile_name: str = "default"
-    save_enabled: bool = True
     trigger_mode: Literal["internal", "external", "simulated"] = "internal"
     readout_mode: str = "normal"
     shared_physical_camera: bool = False

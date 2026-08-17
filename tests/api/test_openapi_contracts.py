@@ -64,6 +64,7 @@ def test_openapi_observation_responses_are_typed():
     start_schema = data["paths"]["/api/v1/observation/start"]["post"]["responses"]["200"]["content"]["application/json"]["schema"]
     sequence_preview_schema = data["paths"]["/api/v1/observation/sequence/preview"]["post"]["responses"]["200"]["content"]["application/json"]["schema"]
     sequence_load_schema = data["paths"]["/api/v1/observation/sequence/load"]["post"]["responses"]["200"]["content"]["application/json"]["schema"]
+    sequence_retry_schema = data["paths"]["/api/v1/observation/sequence/retry_current_step"]["post"]["responses"]["200"]["content"]["application/json"]["schema"]
 
     assert "$ref" in status_schema
     assert status_schema["$ref"].endswith("/ObservationStatusResponse")
@@ -73,6 +74,7 @@ def test_openapi_observation_responses_are_typed():
     assert start_schema["$ref"].endswith("/ObservationCommandFeedbackResponse")
     assert sequence_preview_schema["$ref"].endswith("/SequencePreview")
     assert sequence_load_schema["$ref"].endswith("/SequenceCommandFeedbackResponse")
+    assert sequence_retry_schema["$ref"].endswith("/SequenceCommandFeedbackResponse")
 
 
 def test_openapi_response_components_include_new_models():

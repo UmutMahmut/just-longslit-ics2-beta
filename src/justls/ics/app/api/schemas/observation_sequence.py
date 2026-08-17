@@ -19,6 +19,7 @@ class ObservationPlanReq(BaseModel):
     target_name: str | None = None
     exposures: list[ExposureSpecReq] = Field(..., min_length=1, max_length=100)
     operator_note: str | None = None
+    save_requested: bool = False
     setup_context: dict[str, Any] | None = None
 
     def to_domain(self) -> ObservationPlan:
@@ -26,6 +27,7 @@ class ObservationPlanReq(BaseModel):
             "target_name": self.target_name,
             "exposures": [spec.to_domain() for spec in self.exposures],
             "operator_note": self.operator_note,
+            "save_requested": self.save_requested,
             "setup_context": self.setup_context,
         }
         if self.plan_id is not None:
@@ -41,6 +43,8 @@ SequenceCommandLiteral = Literal[
     "pause",
     "resume",
     "abort",
+    "retry_current_step",
+    "mark_failed",
 ]
 
 

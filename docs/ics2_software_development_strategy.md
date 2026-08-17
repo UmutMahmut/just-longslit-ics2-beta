@@ -1,20 +1,23 @@
-# JUST Long-Slit ICS 2.0 Software Development Strategy
+# ICS Beta Software Development Strategy
 
 ```text
-Scope: software strategy for JUST Long-Slit ICS 2.0
-Status: after Phase 2.9-F operator workflow and Phase 3.0-A sequence baseline
+Scope: campus-integration strategy for C:\Users\UmutMahmut\ICS_beta only
+Status: after Phase 3.0-B Lite and camera-role/acquisition-workspace transition
 ```
 
 ## Mission
 
-JUST Long-Slit ICS 2.0 is the instrument-control software backbone for the JUST long-slit spectrograph.
+ICS Beta is the active campus-integration line for the JUST long-slit
+instrument. It inherits the useful ICS 2.0 backbone, but this roadmap governs
+the Beta repository and does not reopen development of the frozen historical
+project.
 
 It is not only a GUI, and it is not a single hardware driver. Its purpose is to provide stable software contracts for routine instrument operation, diagnostics, simulation-first development, future real-hardware adapters, and eventual observatory/OCS integration.
 
 The long-term observing loop is:
 
 ```text
-OCS / Operator / Future Script
+Operator / Future Script / Later OCS
   -> ObservationRequest / ObservationPlan
   -> ICS validation and readiness
   -> command execution
@@ -156,7 +159,7 @@ context  -> read-only observatory/OCS/TCS visibility
 
 Preview and Arm are intentionally independent. UI preview is advisory. Backend Arm gate is authoritative.
 
-Exposure completion and data-product existence are intentionally separate. Simulator data products are references only until a real writer/pipeline exists.
+Exposure completion, save intent, and data-product existence are intentionally separate. Unsaved acquisitions are `not_requested`; saved simulator acquisitions produce local FITS/PNG with simulated provenance.
 
 Observatory context is intentionally read-only. ICS must not gain telescope, dome, weather, or OCS write authority without a formal external contract.
 
@@ -207,45 +210,55 @@ Phase 2.9-D  ExposureRecord / DataProductRef contract
 Phase 2.9-E  Read-only ObservatoryContext
 Phase 2.9-F  Operator Workflow Polish
 Phase 3.0-A  Observation Plan / operator-stepped Sequence Contract
+Phase 3.0-B  Minimum Safe Recovery (Lite)
+Transition   Camera Roles / Acquisition Workspace
 ```
 
-### Candidate next phases
+### Active ICS Beta mainline
 
-#### Phase 3.0-B: Durable Sequence Recovery Contract
-
-Goal: define restart, reconciliation, retry, and acknowledgement behavior before unattended execution.
-
-Candidate work:
+The near-term objective is a short, stable path to trustworthy raw science and
+calibration FITS while telescope pointing remains an external/manual
+responsibility:
 
 ```text
-plan/execution persistence boundary
-file-system reconciliation after restart
-retry versus fail-fast rules
-operator acknowledgement and recovery actions
+Phase 3.1  Science FITS contract closure
+Phase 3.2  Real-camera adapter and hardware-fact readiness
+Phase 4.0  First single-science-camera acquisition through ICS Beta
+Phase 4.1  Stable operator-driven Science/Bias/Dark/Flat/Arc acquisition
+Phase 4.2  Science camera + slit/guide camera + required instrument-state integration
 ```
 
-#### Phase 3.x: Unattended Simulator Execution
+Phase 3.0-B Lite deliberately uses versioned JSON rather than a database. It
+persists plans, progress, completed ExposureRecords, active-step identity, and
+frame reservations. Restart during an uncertain active step requires explicit
+Retry, Abort, or Mark Failed; Retry is unavailable if a possible FITS is found.
 
-Goal: add timed auto-advance only after durable recovery semantics are accepted.
+The transition fixes three responsibilities before Phase 3.1: science Single
+exposure, science operator-stepped Sequence, and continuous slit/guide Preview.
+The science acquisition path has no separate preview lifecycle. Save intent is
+an acquisition property, defaults off, and alone controls file-index
+reservation and FITS/quicklook persistence. Slit/guide Preview defaults on,
+remains independent from science acquisition, and never writes data products.
 
-Candidate concepts:
+This responsibility split does not collapse the instrument-facing display
+topology. Observe keeps a height-balanced slit/guide image above three B/G/R
+science panes. The beta bridge mirrors one shared science-camera readout into
+those stable logical channels and labels that fact; the structure remains ready
+for three independent science cameras.
 
-```text
-background execution ownership
-exposure deadline and automatic readout ownership
-timeout and cancellation behavior
-automatic step transitions
-restart-safe audit continuity
-```
+This UI and routing seam does not replace the next mainline boundary: Phase 3.1
+still closes the science-FITS data contract before real-camera integration.
 
-### Later phases
+Unattended multi-step auto-advance is not on the Phase 4.2 critical path.
+Single-exposure completion ownership may be added with the real-camera
+lifecycle, without first building an unattended scheduler.
 
-```text
-Phase 3.x  Simulator-backed end-to-end observing workflow
-Phase 4.x  Real-hardware commissioning through adapter contracts
-```
+### Deferred beyond the active mainline
 
-The current sequence baseline is deliberately in-memory and operator-stepped. Do not add unattended background execution before durable recovery and reconciliation semantics are accepted.
+Phase 5.0 observatory/OCS integration and later production automation are
+paused. Full automatic retry/resume, a data-product database/archive, closed-loop
+guiding, independent physical B/G/R cameras, role enforcement, and a large UI
+redesign must not block the Phase 4.2 science-FITS objective.
 
 ## Technology adoption gate
 

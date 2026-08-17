@@ -146,7 +146,6 @@
               <button class="btn" type="button" data-action="instrument-refresh-detector-config" disabled>Refresh Detector Config</button>
               <dl class="kv compact-kv" style="margin-top: 8px;">
                 <dt>Profile</dt><dd><code data-bind="v7.instrument.detector.profile">default</code></dd>
-                <dt>Save</dt><dd><code data-bind="v7.instrument.detector.save_enabled">unknown</code></dd>
                 <dt>Trigger</dt><dd><code data-bind="v7.instrument.detector.trigger_mode">software</code></dd>
                 <dt>Readout</dt><dd><code data-bind="v7.instrument.detector.readout_mode">normal</code></dd>
                 <dt>B/G/R Hardware</dt><dd><code>read-only summary</code></dd>
@@ -468,7 +467,6 @@
   function updateDetectorFields(payload) {
     if (!payload || typeof payload !== "object") return;
     setText(document.querySelector('[data-bind="v7.instrument.detector.profile"]'), payload.profile_name || "unknown");
-    setText(document.querySelector('[data-bind="v7.instrument.detector.save_enabled"]'), payload.save_enabled === undefined ? "unknown" : String(payload.save_enabled));
     setText(document.querySelector('[data-bind="v7.instrument.detector.trigger_mode"]'), payload.trigger_mode || "unknown");
     setText(document.querySelector('[data-bind="v7.instrument.detector.readout_mode"]'), payload.readout_mode || "unknown");
     const channels = payload.channels || payload.channel_state || {};

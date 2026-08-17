@@ -43,7 +43,7 @@ def test_detector_config_model_defaults():
     data = cfg.to_dict()
 
     assert data["profile_name"] == "default"
-    assert data["save_enabled"] is True
+    assert "save_enabled" not in data
     assert data["trigger_mode"] == "internal"
     assert data["readout_mode"] == "normal"
     assert data["channels"]["B"]["camera_role"] == "science_b"

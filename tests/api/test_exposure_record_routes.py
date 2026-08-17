@@ -24,7 +24,7 @@ def test_observation_finish_returns_latest_exposure_record() -> None:
 
     arm = client.post(
         "/api/v1/observation/arm",
-        json={"exp_time_s": 5.0, "frame_type": "science"},
+        json={"exp_time_s": 5.0, "frame_type": "science", "save_requested": True},
     )
     assert arm.status_code == 200
 
@@ -53,7 +53,7 @@ def test_status_full_exposes_latest_exposure_record_after_completion() -> None:
 
     assert client.post(
         "/api/v1/observation/arm",
-        json={"exp_time_s": 5.0, "frame_type": "science"},
+        json={"exp_time_s": 5.0, "frame_type": "science", "save_requested": True},
     ).status_code == 200
     assert client.post("/api/v1/observation/start").status_code == 200
     assert client.post("/api/v1/observation/finish").status_code == 200

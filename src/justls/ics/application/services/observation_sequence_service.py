@@ -7,13 +7,22 @@ from justls.ics.application.services.observation_preview_service import (
     ObservationPreviewService,
 )
 from justls.ics.application.services.observation_service import ObservationService
+from justls.ics.application.services.observation_sequence_store import (
+    InMemoryObservationSequenceStore,
+    ObservationSequenceStore,
+    initialize_runtime_sequence,
+)
 from justls.ics.application.services.setup_context_service import SetupContextService
 from justls.ics.domain.observation.models import ObservationRequest, utc_now_iso
 from justls.ics.domain.observation.sequence import (
     ObservationPlan,
     SequenceExecutionSnapshot,
     SequenceExecutionState,
+    SequenceActiveStep,
+    SequenceFrameReservation,
     SequencePreview,
+    SequenceRecoveryAction,
+    SequenceRecoveryInfo,
     SequenceStepPreview,
     SequenceStepResult,
     SequenceStepState,
@@ -49,11 +58,14 @@ class ObservationSequenceService:
         observation_service: ObservationService,
         preview_service: ObservationPreviewService,
         setup_context_service: SetupContextService | None = None,
+        state_store: ObservationSequenceStore | None = None,
     ) -> None:
         self.runtime = runtime
         self.observation_service = observation_service
         self.preview_service = preview_service
         self.setup_context_service = setup_context_service
+        self.state_store = state_store or InMemoryObservationSequenceStore()
+        initialize_runtime_sequence(runtime, self.state_store)
 
     def status(self) -> SequenceExecutionSnapshot | None:
         return self.runtime.sequence_execution
@@ -107,7 +119,54 @@ class ObservationSequenceService:
     def abort(self) -> SequenceCommandResult:
         return self._execute("abort", self._abort)
 
+    def retry_current_step(self) -> SequenceCommandResult:
+        return self._execute("retry_current_step", self._retry_current_step)
+
+    def mark_failed(self) -> SequenceCommandResult:
+        return self._execute("mark_failed", self._mark_failed)
+
+    def _persist(self, snapshot: SequenceExecutionSnapshot) -> None:
+        snapshot.last_persisted_at_utc = utc_now_iso()
+        try:
+            self.state_store.save(snapshot)
+        except (OSError, ValueError) as exc:
+            previous_state = snapshot.state.value
+            snapshot.state = SequenceExecutionState.RECOVERY_REQUIRED
+            snapshot.active_exposure = False
+            snapshot.recovery = SequenceRecoveryInfo(
+                reason="persistence_failure",
+                interrupted_state=previous_state,
+                interrupted_index=snapshot.current_index,
+                file_issues=[str(exc)],
+                retry_allowed=False,
+                allowed_actions=[
+                    SequenceRecoveryAction.ABORT,
+                    SequenceRecoveryAction.MARK_FAILED,
+                ],
+            )
+            snapshot.message = (
+                "Recovery required: sequence state could not be saved. "
+                "Detector commands are blocked until persistence is repaired."
+            )
+            self.runtime.sequence_persistence_error = str(exc)
+            raise InvalidStateError(
+                snapshot.message,
+                subsystem="observation_sequence",
+                details={"persistence_error": str(exc)},
+            ) from exc
+        self.runtime.sequence_persistence_error = None
+
     def _execute(
+        self,
+        command: str,
+        action: Callable[[], SequenceExecutionSnapshot],
+        *,
+        params: dict | None = None,
+    ) -> SequenceCommandResult:
+        with self.runtime.sequence_lock:
+            return self._execute_locked(command, action, params=params)
+
+    def _execute_locked(
         self,
         command: str,
         action: Callable[[], SequenceExecutionSnapshot],
@@ -124,7 +183,17 @@ class ObservationSequenceService:
         self.runtime.mark_job_running(job.job_id)
 
         try:
+            if self.runtime.sequence_persistence_error is not None:
+                raise InvalidStateError(
+                    "Sequence persistence is unavailable; observation commands are blocked.",
+                    subsystem="observation_sequence",
+                    details={
+                        "persistence_error": self.runtime.sequence_persistence_error,
+                        "persistence_path": self.runtime.sequence_persistence_path,
+                    },
+                )
             snapshot = action()
+            self._persist(snapshot)
         except ICSException as exc:
             job = self.runtime.mark_job_rejected(job.job_id, exc)
             return SequenceCommandResult(
@@ -160,12 +229,61 @@ class ObservationSequenceService:
         self,
         plan: ObservationPlan,
         index: int,
+        reservation: SequenceFrameReservation | None = None,
     ) -> tuple[dict | None, dict | None]:
         if plan.setup_context is None:
             return None, None
         context = SessionDataContext.from_dict(plan.setup_context)
+        if not plan.save_requested:
+            return context.to_persisted_dict(), None
         context.next_frame_index += index
-        return context.to_persisted_dict(), context.data_preview()
+        preview = context.data_preview()
+        if reservation is not None:
+            preview = dict(reservation.step_data_previews[index])
+        return context.to_persisted_dict(), preview
+
+    def _reserve_frame_indices(
+        self,
+        plan: ObservationPlan,
+    ) -> SequenceFrameReservation | None:
+        if not plan.save_requested or plan.setup_context is None:
+            return None
+        plan_context = SessionDataContext.from_dict(plan.setup_context)
+        start_index = plan_context.next_frame_index
+        previews: list[dict[str, str]] = []
+        for index in range(len(plan.exposures)):
+            step_context = SessionDataContext.from_dict(plan.setup_context)
+            step_context.next_frame_index = start_index + index
+            previews.append(step_context.data_preview())
+
+        if self.setup_context_service is not None:
+            current = self.setup_context_service.get_context()
+            identity_changed = (
+                current.root_name != plan_context.root_name
+                or current.date_prefix != plan_context.date_prefix
+                or current.next_frame_index != start_index
+                or current.data_directory != plan_context.data_directory
+            )
+            if identity_changed:
+                raise InvalidStateError(
+                    "Setup/data context changed after sequence preview; preview and load the plan again.",
+                    subsystem="observation_sequence",
+                    details={
+                        "previewed_start_index": start_index,
+                        "current_start_index": current.next_frame_index,
+                        "previewed_root_name": plan_context.root_name,
+                        "current_root_name": current.root_name,
+                    },
+                )
+            current.next_frame_index = start_index + len(plan.exposures)
+            self.setup_context_service.save_context(current)
+
+        return SequenceFrameReservation(
+            start_index=start_index,
+            count=len(plan.exposures),
+            end_index_exclusive=start_index + len(plan.exposures),
+            step_data_previews=previews,
+        )
 
     def _load(self, plan: ObservationPlan) -> SequenceExecutionSnapshot:
         current = self.status()
@@ -194,8 +312,10 @@ class ObservationSequenceService:
                 },
             )
 
+        reservation = self._reserve_frame_indices(preview.plan)
         snapshot = SequenceExecutionSnapshot(
             plan=preview.plan,
+            frame_reservation=reservation,
             message="Sequence loaded. Start the first exposure when ready.",
         )
         self.runtime.sequence_execution = snapshot
@@ -248,26 +368,61 @@ class ObservationSequenceService:
         setup_context, data_preview = self._step_setup_payloads(
             snapshot.plan,
             snapshot.current_index,
+            snapshot.frame_reservation,
         )
-        arm_result = self.observation_service.arm(
-            exp_time_s=exposure.exp_time_s,
-            frame_type=exposure.frame_type.value,
-            operator_note=self._step_note(snapshot.plan, exposure.label),
-            setup_context_override=setup_context,
-            data_preview_override=data_preview,
-            sequence_owned=True,
+        previous_state = snapshot.state
+        snapshot.state = SequenceExecutionState.RUNNING
+        snapshot.active_step = SequenceActiveStep(
+            index=snapshot.current_index,
+            setup_file_stem=(data_preview or {}).get("file_stem"),
         )
-        self._require_dispatch_success(arm_result, "arm")
-        start_result = self.observation_service.start(sequence_owned=True)
-        if start_result.job.status.value != "succeeded":
-            cleanup_result = self.observation_service.abort_discard(
+        snapshot.message = "Current step reserved; detector arm is pending."
+        self._persist(snapshot)
+
+        try:
+            arm_result = self.observation_service.arm(
+                exp_time_s=exposure.exp_time_s,
+                frame_type=exposure.frame_type.value,
+                operator_note=self._step_note(snapshot.plan, exposure.label),
+                save_requested=snapshot.plan.save_requested,
+                setup_context_override=setup_context,
+                data_preview_override=data_preview,
                 sequence_owned=True
             )
-            self._require_dispatch_success(cleanup_result, "start_cleanup_abort")
-            self._require_dispatch_success(start_result, "start")
+            self._require_dispatch_success(arm_result, "arm")
+            detector_status = self.observation_service.get_exposure_status()
+            armed = detector_status.get("armed_exposure") or {}
+            meta = detector_status.get("observation_meta") or {}
+            snapshot.active_step.phase = "armed"
+            snapshot.active_step.obs_id = armed.get("obs_id") or meta.get("obs_id")
+            snapshot.active_step.exp_id = armed.get("exp_id") or meta.get("exp_id")
+            self._persist(snapshot)
+
+            start_result = self.observation_service.start(sequence_owned=True)
+            if start_result.job.status.value != "succeeded":
+                cleanup_result = self.observation_service.abort_discard(
+                    sequence_owned=True
+                )
+                self._require_dispatch_success(cleanup_result, "start_cleanup_abort")
+                self._require_dispatch_success(start_result, "start")
+        except ICSException:
+            detector_state = self.observation_service.get_exposure_status().get("state")
+            if detector_state in {"armed", "exposing"}:
+                cleanup_result = self.observation_service.abort_discard(
+                    sequence_owned=True
+                )
+                self._require_dispatch_success(cleanup_result, "start_cleanup_abort")
+            snapshot.state = previous_state
+            snapshot.active_exposure = False
+            snapshot.active_step = None
+            snapshot.message = "Sequence step did not start; retry Start when ready."
+            self._persist(snapshot)
+            raise
 
         snapshot.state = SequenceExecutionState.RUNNING
         snapshot.active_exposure = True
+        snapshot.active_step.phase = "exposing"
+        snapshot.active_step.started_at_utc = utc_now_iso()
         snapshot.updated_at_utc = utc_now_iso()
         snapshot.message = (
             f"Exposure {snapshot.current_index + 1}/{snapshot.total_steps} is running."
@@ -328,6 +483,7 @@ class ObservationSequenceService:
         )
         snapshot.current_index += 1
         snapshot.active_exposure = False
+        snapshot.active_step = None
         snapshot.updated_at_utc = utc_now_iso()
 
         if snapshot.current_index >= snapshot.total_steps:
@@ -407,6 +563,57 @@ class ObservationSequenceService:
             snapshot.active_exposure = False
 
         snapshot.state = SequenceExecutionState.ABORTED
+        snapshot.active_step = None
         snapshot.updated_at_utc = utc_now_iso()
         snapshot.message = "Observation sequence aborted. Pending steps were not run."
+        return snapshot
+
+    def _retry_current_step(self) -> SequenceExecutionSnapshot:
+        snapshot = self._require_sequence()
+        recovery = snapshot.recovery
+        if snapshot.state != SequenceExecutionState.RECOVERY_REQUIRED or recovery is None:
+            raise InvalidStateError(
+                "Retry Current Step is only valid while sequence recovery is required.",
+                subsystem="observation_sequence",
+                details={"state": snapshot.state.value},
+            )
+        if not recovery.retry_allowed:
+            raise InvalidStateError(
+                "Retry is blocked because a FITS file may already exist or the durable record is inconsistent.",
+                subsystem="observation_sequence",
+                details={
+                    "reason": recovery.reason,
+                    "detected_files": recovery.detected_files,
+                    "file_issues": recovery.file_issues,
+                },
+            )
+        snapshot.state = (
+            SequenceExecutionState.LOADED
+            if snapshot.current_index == 0
+            else SequenceExecutionState.RUNNING
+        )
+        snapshot.active_exposure = False
+        snapshot.active_step = None
+        snapshot.recovery = None
+        snapshot.updated_at_utc = utc_now_iso()
+        snapshot.message = (
+            "Recovery acknowledged. The current step is ready for an explicit Start."
+        )
+        return snapshot
+
+    def _mark_failed(self) -> SequenceExecutionSnapshot:
+        snapshot = self._require_sequence()
+        if snapshot.state != SequenceExecutionState.RECOVERY_REQUIRED:
+            raise InvalidStateError(
+                "Mark Failed is only valid while sequence recovery is required.",
+                subsystem="observation_sequence",
+                details={"state": snapshot.state.value},
+            )
+        snapshot.state = SequenceExecutionState.FAILED
+        snapshot.active_exposure = False
+        snapshot.active_step = None
+        snapshot.updated_at_utc = utc_now_iso()
+        snapshot.message = (
+            "Sequence marked failed by the operator after recovery review."
+        )
         return snapshot

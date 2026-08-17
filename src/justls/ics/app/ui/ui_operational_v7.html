@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="light dark" />
   <title>JUST 长缝光谱仪 ICS · v7.1 Operator Console</title>
   <!--
-    Phase 2.9-F / Phase 3.0-A v7.1 operator workflow shell.
+    Phase 3.0-B Lite plus camera-role transition v7.1 operator shell.
 
     Intent:
       - rebuild v7 around the current information architecture decision;
@@ -136,6 +136,9 @@
     .badge.future { color: var(--muted); }
     .badge.warn { color: var(--danger); border-color: #dc9b9b; background: #fff0f0; }
 
+    .mode-switch { display: flex; gap: 6px; border-bottom: 1px solid var(--border-soft); padding-bottom: 8px; }
+    .mode-switch .btn[aria-selected="true"] { background: #dceafe; border-color: #5579ad; font-weight: 760; }
+
     .live-preview { position: relative; min-height: 340px; border: 1px solid #7f8da3; background: radial-gradient(circle at 52% 38%, rgba(255,255,255,0.9), rgba(255,255,255,0.05) 8%, transparent 18%), radial-gradient(circle at 38% 55%, rgba(125,171,222,0.45), transparent 16%), radial-gradient(circle at 64% 62%, rgba(55,91,143,0.35), transparent 20%), linear-gradient(180deg, #0b1220, #1f2937 55%, #111827); overflow: hidden; }
     .live-preview::before { content: ""; position: absolute; inset: 0; background-image: linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px); background-size: 32px 32px; opacity: 0.36; }
     .live-overlay { position: absolute; inset: 10px; display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; color: #e5edf8; font-size: 12px; pointer-events: none; }
@@ -146,8 +149,28 @@
     .channel-card, .channel-preview { border: 1px solid var(--border-soft); background: var(--panel-2); min-width: 0; }
     .channel-card h3 { margin: 0; padding: 7px 9px; border-bottom: 1px solid var(--border-soft); background: #f8fafc; color: var(--text); }
     .channel-card .panel-body { padding: 9px; }
-    .channel-preview { min-height: 112px; background: linear-gradient(135deg, #111827, #334155); color: #e5edf8; display: grid; place-items: center; font-family: var(--mono); font-size: 12px; position: relative; overflow: hidden; }
-    .channel-preview::after { content: "DEMO PLACEHOLDER"; position: absolute; right: 6px; bottom: 5px; font-size: 9px; color: rgba(226,232,240,0.74); }
+    .observe-camera-panel {
+      --observe-slit-height: 660px;
+      --observe-bgr-height: 440px;
+      display: flex;
+      flex-direction: column;
+      align-self: stretch;
+    }
+    .observe-camera-panel > .panel-body { flex: 1; min-height: 0; }
+    .observe-camera-stack { display: flex; flex-direction: column; justify-content: space-between; gap: 12px; }
+    .observe-camera-section { flex: 0 0 auto; min-height: 0; }
+    .preview-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; margin-bottom: 7px; }
+    .preview-heading h3 { margin: 0; }
+    .live-preview.slit-preview { flex: none; min-height: 0; height: var(--observe-slit-height); }
+    .preview-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 7px; font-size: 11px; color: var(--muted); }
+    .preview-toolbar label { display: inline-flex; align-items: center; gap: 6px; }
+    .preview-toolbar input[type="checkbox"] { width: auto; }
+    .preview-toolbar code { color: var(--text); }
+    .science-channel-grid { flex: none; min-height: 0; height: var(--observe-bgr-height); }
+    .channel-preview { height: 100%; min-height: 0; background: linear-gradient(135deg, #111827, #334155); color: #e5edf8; position: relative; overflow: hidden; }
+    .channel-preview img { position: relative; z-index: 1; }
+    .channel-preview .channel-label { position: absolute; z-index: 2; top: 6px; left: 6px; border: 1px solid rgba(226,232,240,0.5); background: rgba(15,23,42,0.78); padding: 4px 7px; font: 700 11px var(--mono); }
+    .channel-preview::after { content: "BETA · SHARED SCIENCE SOURCE"; position: absolute; z-index: 2; right: 6px; bottom: 5px; font-size: 9px; color: rgba(226,232,240,0.82); }
 
     .table { width: 100%; border-collapse: collapse; font-size: 12px; }
     .table th, .table td { border-bottom: 1px solid var(--border-soft); padding: 7px 6px; text-align: left; vertical-align: top; }
@@ -209,6 +232,10 @@
       .nav { border-right: 0; border-bottom: 2px solid #7f8da3; grid-template-columns: repeat(4, minmax(0, 1fr)); }
       .nav .group-label { grid-column: 1 / -1; }
       .status-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .observe-camera-stack { justify-content: flex-start; }
+      .live-preview.slit-preview { flex: none; min-height: 0; height: clamp(220px, 42vw, 360px); }
+      .science-channel-grid { flex: none; min-height: 0; height: auto; }
+      .channel-preview { height: clamp(130px, 18vw, 210px); min-height: 0; }
     }
     @media (max-width: 720px) {
       body { padding: 0; }
@@ -226,8 +253,9 @@
         <div class="subtitle">JUST Telescope · Long-Slit Spectrograph · ICS 2.0</div>
         <h1>v7.1 Operator Console Prototype</h1>
         <div class="badge-row">
-          <span class="badge demo">Phase 2.9-F operator workflow</span>
-          <span class="badge live">Sequence baseline active</span>
+          <span class="badge demo">Phase 3.0-B Lite operator workflow</span>
+          <span class="badge live">Durable sequence recovery active</span>
+          <span class="badge live">B/G/R logical channels · beta shared source</span>
           <span class="badge live">Runtime enabled by default</span>
         </div>
       </div>
@@ -283,7 +311,7 @@
                     <code data-bind="v7.setup.detector_profile">default</code>
                   </div>
                   <div class="summary-chip">
-                    <span>Next Frame</span>
+                    <span>Next Unreserved Frame</span>
                     <code data-bind="v7.data.next_frame_token">AUTO-0001</code>
                   </div>
                 </div>
@@ -301,7 +329,7 @@
                     <label>Support / Operator<input value="" placeholder="Support astronomer" data-role="session-input" data-field="support_operator" /></label>
                     <label>Root Name<input value="justls" placeholder="root name" data-role="session-input" data-field="root_name" /></label>
                     <label>Date Prefix<input value="AUTO" placeholder="AUTO" data-role="session-input" data-field="date_prefix" /></label>
-                    <label>Next Frame Index<input type="number" min="1" step="1" value="1" data-role="session-input" data-field="next_frame_index" /></label>
+                    <label>Next Unreserved Index<input type="number" min="1" step="1" value="1" data-role="session-input" data-field="next_frame_index" /></label>
                     <label>Data Directory<input value="" placeholder="D:/data/JUST" data-role="session-input" data-field="data_directory" /></label>
                   </div>
                   <label style="margin-top: 10px;">Comment<textarea placeholder="Session note / observing comment" data-role="session-input" data-field="comment"></textarea></label>
@@ -461,7 +489,6 @@
                       <button class="btn" type="button" data-action="instrument-refresh-detector-config" disabled>Refresh Detector Config</button>
                       <dl class="kv compact-kv" style="margin-top: 8px;">
                         <dt>Profile</dt><dd><code data-bind="v7.instrument.detector.profile">default</code></dd>
-                        <dt>Save</dt><dd><code data-bind="v7.instrument.detector.save_enabled">unknown</code></dd>
                         <dt>Trigger</dt><dd><code data-bind="v7.instrument.detector.trigger_mode">software</code></dd>
                         <dt>Readout</dt><dd><code data-bind="v7.instrument.detector.readout_mode">normal</code></dd>
                         <dt>B/G/R Hardware</dt><dd><code>read-only summary</code></dd>
@@ -534,34 +561,58 @@
 
         <section class="page" data-page-panel="observe" data-role="observe-page" data-phase="runtime-enhanceable">
           <div class="grid grid-2-1">
-            <section class="panel">
-              <h2>Observe · Latest Exposure Preview</h2>
-              <div class="panel-body">
-                <div class="live-preview" aria-label="latest exposure preview placeholder">
-                  <img src="/camera/slit/latest.jpg" alt="Slit camera preview" style="width: 100%; height: 100%; object-fit: contain;" onerror="this.style.display='none';" />
-                  <div class="live-overlay" style="display: none;"><!-- 隐藏demo信息 -->
-                    <div class="stack"><span class="pill">LIVE / DEMO / NOT WIRED</span><span class="pill">Latest Exposure Preview</span></div>
-                    <div class="stack"><span class="pill">state: ready_to_arm</span><span class="pill">stale: unknown</span></div>
+            <section class="panel observe-camera-panel" data-role="camera-preview-panel">
+              <h2>Observe · Camera Views</h2>
+              <div class="panel-body observe-camera-stack">
+                <section class="observe-camera-section" data-role="slit-preview-panel">
+                  <div class="preview-heading">
+                    <h3>Slit / Guide Camera · Continuous Preview</h3>
+                    <span class="badge live">Preview only · never saved</span>
                   </div>
-                </div>
-                <div class="channel-grid" aria-label="BGR channel preview placeholders" style="margin-top: 8px;">
-                  <div class="channel-preview"><img src="/camera/b/latest.jpg" alt="B channel" style="width: 100%; height: 100%; object-fit: contain;" onerror="this.style.display='none';" /></div>
-                  <div class="channel-preview"><img src="/camera/g/latest.jpg" alt="G channel" style="width: 100%; height: 100%; object-fit: contain;" onerror="this.style.display='none';" /></div>
-                  <div class="channel-preview"><img src="/camera/r/latest.jpg" alt="R channel" style="width: 100%; height: 100%; object-fit: contain;" onerror="this.style.display='none';" /></div>
-                </div>
+                  <div class="live-preview slit-preview" aria-label="slit and guide live preview">
+                    <img src="/camera/slit/latest.jpg" data-role="slit-preview-image" alt="Slit and guide camera live preview" style="width: 100%; height: 100%; object-fit: contain;" />
+                  </div>
+                  <div class="preview-toolbar">
+                    <label><input type="checkbox" data-role="slit-preview-enabled" checked /> Keep Preview Running</label>
+                    <span>State <code data-bind="v7.camera.slit.state">initializing</code></span>
+                    <span>Frames <code data-bind="v7.camera.slit.sequence">not available</code></span>
+                  </div>
+                </section>
+
+                <section class="observe-camera-section" data-role="science-channel-preview-panel">
+                  <div class="preview-heading">
+                    <h3>Science Spectrograph · B / G / R</h3>
+                    <span class="badge demo">Beta: one shared science-camera source feeds B/G/R</span>
+                  </div>
+                  <div class="channel-grid science-channel-grid" aria-label="BGR science channel previews">
+                    <div class="channel-preview" data-channel="B">
+                      <img data-role="science-channel-image" data-channel="B" data-ics-camera-src="/camera/b/latest.jpg" alt="B science channel latest acquisition" style="width: 100%; height: 100%; object-fit: contain; display: none;" />
+                      <span class="channel-label">B CHANNEL</span>
+                    </div>
+                    <div class="channel-preview" data-channel="G">
+                      <img data-role="science-channel-image" data-channel="G" data-ics-camera-src="/camera/g/latest.jpg" alt="G science channel latest acquisition" style="width: 100%; height: 100%; object-fit: contain; display: none;" />
+                      <span class="channel-label">G CHANNEL</span>
+                    </div>
+                    <div class="channel-preview" data-channel="R">
+                      <img data-role="science-channel-image" data-channel="R" data-ics-camera-src="/camera/r/latest.jpg" alt="R science channel latest acquisition" style="width: 100%; height: 100%; object-fit: contain; display: none;" />
+                      <span class="channel-label">R CHANNEL</span>
+                    </div>
+                  </div>
+                  <p style="margin: 7px 0 0; color: var(--muted); font-size: 11px;">The beta bridge shows the same completed science-camera readout in all three panes. The B/G/R layout remains ready for three independent science cameras.</p>
+                </section>
               </div>
             </section>
 
             <section class="panel" id="v7-observe-controls" data-role="v7-observe-panel" data-phase="static-fallback">
-              <h2>Observe · Exposure and Sequence Control</h2>
+              <h2>Science Acquisition Control</h2>
               <div class="panel-body grid">
-                <div class="field-grid">
-                  <label>Exposure Time (s)<input type="number" min="0.001" step="0.001" value="30" data-role="obs-exp-time" /></label>
-                  <label>Frame Type<select data-role="obs-frame-type"><option value="science">science</option><option value="flat">flat</option><option value="arc">arc</option><option value="test">test</option></select></label>
-                  <label style="grid-column: 1 / -1;">Operator Note<textarea data-role="obs-operator-note" placeholder="Optional note"></textarea></label>
+                <div class="mode-switch" role="tablist" aria-label="science acquisition mode">
+                  <button class="btn" type="button" role="tab" aria-selected="true" data-action="observe-mode-single">Single Exposure</button>
+                  <button class="btn" type="button" role="tab" aria-selected="false" data-action="observe-mode-sequence">Sequence</button>
                 </div>
+                <label><input type="checkbox" data-role="observe-save-products" /> Save FITS + Quicklook</label>
+                <span class="badge warn" data-bind="v7.observe.save_status">NOT SAVING · frame remains in memory only</span>
                 <dl class="kv">
-                  <dt>Status Endpoint</dt><dd><code>/api/v1/observation/status</code></dd>
                   <dt>Observation State</dt><dd><code data-bind="v7.observe.state">ready_to_arm</code></dd>
                   <dt>Armed Exposure</dt><dd><code data-bind="v7.observe.armed">not armed</code></dd>
                   <dt>Last Command</dt><dd><code data-bind="v7.observe.last_command">none</code></dd>
@@ -571,46 +622,71 @@
                   <dt>Result Summary</dt><dd><code data-bind="v7.observe.result_summary">no command yet</code></dd>
                   <dt>Runtime State</dt><dd><code data-bind="v7.observe.runtime_state">initializing</code></dd>
                 </dl>
-                <div class="badge-row">
-                  <button class="btn" type="button" data-action="obs-preview" disabled>Preview</button>
-                  <button class="btn primary" type="button" data-action="obs-arm" disabled>Arm</button>
-                  <button class="btn primary" type="button" data-action="obs-start" disabled>Start</button>
-                  <button class="btn" type="button" data-action="obs-finish" disabled>Finish</button>
-                  <button class="btn" type="button" data-action="obs-stop-readout" disabled>Stop & Readout</button>
-                  <button class="btn danger" type="button" data-action="obs-abort-discard" disabled>Abort & Discard</button>
-                </div>
-                <label><input type="checkbox" data-role="obs-abort-confirm" /> Enable abort/discard command</label>
-                <p style="margin: 0; color: var(--muted); font-size: 12px;">Current baseline: Start begins an exposure but does not schedule timer-based completion. Use Finish or Stop &amp; Readout; automatic completion remains deferred until execution and recovery semantics are defined.</p>
-                <section class="subpanel" data-role="v7-exposure-record-panel">
-                  <h3>Latest Exposure Record / Data Products</h3>
-                  <dl class="kv">
-                    <dt>Record</dt><dd><code data-bind="v7.observe.record.id">not available</code></dd>
-                    <dt>Provenance</dt><dd><code data-bind="v7.observe.record.provenance">not available</code></dd>
-                    <dt>FITS</dt><dd><code data-bind="v7.observe.record.fits">not created</code></dd>
-                    <dt>Quicklook</dt><dd><code data-bind="v7.observe.record.quicklook">not created</code></dd>
-                  </dl>
+
+                <section class="subpanel" role="tabpanel" data-observe-mode-panel="single">
+                  <h3>Single Exposure</h3>
+                  <div class="field-grid">
+                    <label>Exposure Time (s)<input type="number" min="0.001" step="0.001" value="30" data-role="obs-exp-time" /></label>
+                    <label>Frame Type<select data-role="obs-frame-type"><option value="science">science</option><option value="flat">flat</option><option value="arc">arc</option><option value="test">test</option></select></label>
+                    <label style="grid-column: 1 / -1;">Operator Note<textarea data-role="obs-operator-note" placeholder="Optional note"></textarea></label>
+                  </div>
+                  <div class="badge-row" style="margin-top: 8px;">
+                    <button class="btn" type="button" data-action="obs-preview" disabled>Check Readiness</button>
+                    <button class="btn primary" type="button" data-action="obs-arm" disabled>Arm</button>
+                    <button class="btn primary" type="button" data-action="obs-start" disabled>Start</button>
+                    <button class="btn" type="button" data-action="obs-finish" disabled>Finish</button>
+                    <button class="btn" type="button" data-action="obs-stop-readout" disabled>Stop & Readout</button>
+                    <button class="btn danger" type="button" data-action="obs-abort-discard" disabled>Abort & Discard</button>
+                  </div>
+                  <label style="margin-top: 8px;"><input type="checkbox" data-role="obs-abort-confirm" /> Enable abort/discard command</label>
+                  <p style="margin: 8px 0 0; color: var(--muted); font-size: 12px;">Start does not schedule timer-based completion in this transition. Use Finish or Stop &amp; Readout; the science acquisition path has no separate Preview lifecycle.</p>
+                  <section class="subpanel" data-role="v7-observe-preview-panel">
+                    <h3>Readiness / Validation</h3>
+                    <dl class="kv">
+                      <dt>Readiness</dt><dd><code data-bind="v7.observe.preview.blocked">not checked</code></dd>
+                      <dt>Execution</dt><dd><code data-bind="v7.observe.preview.single_exposure_compatible">not checked</code></dd>
+                      <dt>Detector</dt><dd><code data-bind="v7.observe.preview.detector_state">unknown</code></dd>
+                      <dt>Calibration</dt><dd><code data-bind="v7.observe.preview.calibration_state">not checked</code></dd>
+                      <dt>Slit</dt><dd><code data-bind="v7.observe.preview.slit_state">unknown</code></dd>
+                      <dt>TCS</dt><dd><code data-bind="v7.observe.preview.tcs_state">unavailable</code></dd>
+                      <dt>Setup/Data</dt><dd><code data-bind="v7.observe.preview.setup_context">unknown</code></dd>
+                      <dt>Issues</dt><dd><code data-bind="v7.observe.preview.issues">not checked</code></dd>
+                      <dt>Summary</dt><dd><code data-bind="v7.observe.preview.summary">Readiness has not been checked.</code></dd>
+                    </dl>
+                    <details class="dev-note" data-role="v7-observe-preview-raw">
+                      <summary>Raw Readiness JSON</summary>
+                      <pre data-bind="v7.observe.preview.raw">No readiness request sent.</pre>
+                    </details>
+                  </section>
                 </section>
-                <section class="subpanel" data-role="v7-observe-sequence-panel">
-                  <h3>Observation Sequence / Multi-Exposure</h3>
-                  <p style="margin: 0; color: var(--muted); font-size: 12px;">Enter one exposure per line: <code>frame_type,seconds,label</code>. Execution is audited step-by-step through the single-exposure safety gate.</p>
+
+                <section class="subpanel" role="tabpanel" data-role="v7-observe-sequence-panel" data-observe-mode-panel="sequence" hidden>
+                  <h3>Exposure Sequence</h3>
+                  <p style="margin: 0; color: var(--muted); font-size: 12px;">Enter one exposure per line: <code>frame_type,seconds,label</code>. The Save setting is frozen when the plan is loaded.</p>
                   <label style="margin-top: 8px;">Plan Steps<textarea data-role="sequence-plan-steps" rows="4">science,5,science-1
 science,5,science-2</textarea></label>
                   <div class="badge-row" style="margin-top: 8px;">
-                    <button class="btn" type="button" data-action="sequence-preview" disabled>Preview Plan</button>
+                    <button class="btn" type="button" data-action="sequence-preview" disabled>Check Plan</button>
                     <button class="btn primary" type="button" data-action="sequence-load" disabled>Load Plan</button>
                     <button class="btn primary" type="button" data-action="sequence-start" disabled>Start Step</button>
                     <button class="btn" type="button" data-action="sequence-finish-step" disabled>Finish Step</button>
                     <button class="btn" type="button" data-action="sequence-stop-readout-step" disabled>Stop & Readout Step</button>
                     <button class="btn" type="button" data-action="sequence-pause" disabled>Pause</button>
                     <button class="btn" type="button" data-action="sequence-resume" disabled>Resume</button>
+                    <button class="btn" type="button" data-action="sequence-retry-current-step" disabled>Retry Current Step</button>
+                    <button class="btn danger" type="button" data-action="sequence-mark-failed" disabled>Mark Failed</button>
                     <button class="btn danger" type="button" data-action="sequence-abort" disabled>Abort Sequence</button>
                   </div>
                   <label><input type="checkbox" data-role="sequence-abort-confirm" /> Enable sequence abort/discard command</label>
+                  <label><input type="checkbox" data-role="sequence-mark-failed-confirm" /> Enable Mark Failed recovery command</label>
                   <dl class="kv" style="margin-top: 8px;">
                     <dt>Plan</dt><dd><code data-bind="v7.sequence.plan_id">not loaded</code></dd>
                     <dt>State</dt><dd><code data-bind="v7.sequence.state">idle</code></dd>
                     <dt>Progress</dt><dd><code data-bind="v7.sequence.progress">0 / 0</code></dd>
                     <dt>Current Step</dt><dd><code data-bind="v7.sequence.current">not available</code></dd>
+                    <dt>Saved Frames</dt><dd><code data-bind="v7.sequence.reservation">not reserved</code></dd>
+                    <dt>Persistence</dt><dd><code data-bind="v7.sequence.persistence">not loaded</code></dd>
+                    <dt>Recovery</dt><dd><code data-bind="v7.sequence.recovery">not required</code></dd>
                     <dt>Last Command</dt><dd><code data-bind="v7.sequence.last_command">none</code></dd>
                     <dt>Request ID</dt><dd><code data-bind="v7.sequence.request_id">not available</code></dd>
                     <dt>Latest Job</dt><dd><code data-bind="v7.sequence.latest_job">not available</code></dd>
@@ -619,24 +695,15 @@ science,5,science-2</textarea></label>
                   </dl>
                   <details class="dev-note"><summary>Raw Sequence JSON</summary><pre data-bind="v7.sequence.raw">No sequence request sent.</pre></details>
                 </section>
-                <section class="subpanel" data-role="v7-observe-preview-panel">
-                  <h3>Observation Preview - Readiness / Validation</h3>
+
+                <section class="subpanel" data-role="v7-exposure-record-panel">
+                  <h3>Latest Science Acquisition / Data Products</h3>
                   <dl class="kv">
-                    <dt>Preview Endpoint</dt><dd><code>/api/v1/observation/preview</code></dd>
-                    <dt>Preview</dt><dd><code data-bind="v7.observe.preview.blocked">not checked</code></dd>
-                    <dt>Execution</dt><dd><code data-bind="v7.observe.preview.single_exposure_compatible">not checked</code></dd>
-                    <dt>Detector</dt><dd><code data-bind="v7.observe.preview.detector_state">unknown</code></dd>
-                    <dt>Calibration</dt><dd><code data-bind="v7.observe.preview.calibration_state">not checked</code></dd>
-                    <dt>Slit</dt><dd><code data-bind="v7.observe.preview.slit_state">unknown</code></dd>
-                    <dt>TCS</dt><dd><code data-bind="v7.observe.preview.tcs_state">unavailable</code></dd>
-                    <dt>Setup/Data</dt><dd><code data-bind="v7.observe.preview.setup_context">unknown</code></dd>
-                    <dt>Issues</dt><dd><code data-bind="v7.observe.preview.issues">not checked</code></dd>
-                    <dt>Summary</dt><dd><code data-bind="v7.observe.preview.summary">Preview has not been requested.</code></dd>
+                    <dt>Record</dt><dd><code data-bind="v7.observe.record.id">not available</code></dd>
+                    <dt>Provenance</dt><dd><code data-bind="v7.observe.record.provenance">not available</code></dd>
+                    <dt>FITS</dt><dd><code data-bind="v7.observe.record.fits">not created</code></dd>
+                    <dt>Quicklook</dt><dd><code data-bind="v7.observe.record.quicklook">not created</code></dd>
                   </dl>
-                  <details class="dev-note" data-role="v7-observe-preview-raw">
-                    <summary>Raw Preview JSON</summary>
-                    <pre data-bind="v7.observe.preview.raw">No observation preview requested. Preview is side-effect-free and does not arm the detector.</pre>
-                  </details>
                 </section>
                 <details class="dev-note" data-role="v7-observe-command-raw">
                   <summary>Raw Command JSON</summary>

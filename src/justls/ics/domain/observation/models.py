@@ -48,6 +48,7 @@ class FrameResult:
     started_at_utc: str | None
     finished_at_utc: str | None
     result: str
+    save_requested: bool = True
     quicklook_uri: str | None = None
     exists: bool = False
     simulated: bool = True
@@ -66,6 +67,7 @@ class FrameResult:
             "started_at_utc": self.started_at_utc,
             "finished_at_utc": self.finished_at_utc,
             "result": self.result,
+            "save_requested": self.save_requested,
             "quicklook_uri": self.quicklook_uri,
             "exists": self.exists,
             "simulated": self.simulated,
@@ -81,6 +83,7 @@ class DataProductKind(str, Enum):
 
 
 class DataProductState(str, Enum):
+    NOT_REQUESTED = "not_requested"
     NOT_CREATED = "not_created"
     SIMULATED_REFERENCE = "simulated_reference"
     AVAILABLE = "available"
@@ -193,6 +196,17 @@ class DataProductRef(BaseModel):
             message=message,
         )
 
+    @classmethod
+    def not_requested(cls, *, kind: DataProductKind) -> "DataProductRef":
+        return cls(
+            kind=kind,
+            state=DataProductState.NOT_REQUESTED,
+            exists=False,
+            simulated=False,
+            created_at_utc=utc_now_iso(),
+            message="The operator did not request a persisted data product.",
+        )
+
 
 class FitsHeaderSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -230,6 +244,7 @@ class FitsHeaderSummary(BaseModel):
             "EXP_ID": observation_meta.exp_id,
             "FRAMETYP": observation_meta.frame_type,
             "EXPTIME": observation_meta.exp_time_s,
+            "SAVEREQ": observation_meta.save_requested,
             "SIMULATE": simulated,
         }
         if frame_result is not None:
@@ -264,6 +279,7 @@ class FrameRecord(BaseModel):
     kept: bool
     early_stop: bool
     discarded: bool
+    save_requested: bool = True
     started_at_utc: str | None = None
     finished_at_utc: str | None = None
     data_product: DataProductRef
@@ -288,6 +304,7 @@ class ExposureRecord(BaseModel):
     started_at_utc: str | None = None
     finished_at_utc: str | None = None
     data_product_state: DataProductState
+    save_requested: bool = True
     frames: list[FrameRecord] = Field(default_factory=list)
     primary_data_product: DataProductRef | None = None
     quicklook: DataProductRef | None = None
@@ -328,6 +345,11 @@ class ExposureRecord(BaseModel):
             quicklook = None
             state = "discarded"
             message = "Exposure discarded; data product intentionally absent."
+        elif not frame_result.save_requested:
+            data_product = DataProductRef.not_requested(kind=DataProductKind.FITS)
+            quicklook = None
+            state = "completed"
+            message = "Exposure completed; persistence was not requested."
         elif frame_result.file_uri and frame_result.exists:
             data_product = DataProductRef.available_file(
                 kind=DataProductKind.FITS,
@@ -377,6 +399,7 @@ class ExposureRecord(BaseModel):
             kept=frame_result.kept,
             early_stop=frame_result.early_stop,
             discarded=frame_result.discarded,
+            save_requested=frame_result.save_requested,
             started_at_utc=frame_result.started_at_utc,
             finished_at_utc=frame_result.finished_at_utc,
             data_product=data_product,
@@ -398,6 +421,7 @@ class ExposureRecord(BaseModel):
             started_at_utc=observation_meta.started_at_utc,
             finished_at_utc=observation_meta.finished_at_utc,
             data_product_state=data_product.state,
+            save_requested=frame_result.save_requested,
             frames=[frame],
             primary_data_product=data_product,
             quicklook=quicklook,
@@ -417,6 +441,7 @@ class ObservationMeta:
     exp_id: str
     frame_type: str
     exp_time_s: float
+    save_requested: bool
     state: str
     created_at_utc: str
     started_at_utc: str | None = None
@@ -440,6 +465,7 @@ class ObservationMeta:
         *,
         frame_type: str,
         exp_time_s: float,
+        save_requested: bool = False,
         operator_note: str | None = None,
         instrument_snapshot: dict[str, Any] | None = None,
         calibration_snapshot: dict[str, Any] | None = None,
@@ -453,6 +479,7 @@ class ObservationMeta:
             exp_id=new_exp_id(),
             frame_type=frame_type,
             exp_time_s=float(exp_time_s),
+            save_requested=save_requested,
             state="armed",
             created_at_utc=utc_now_iso(),
             operator_note=operator_note,
@@ -503,6 +530,7 @@ class ObservationMeta:
             "exp_id": self.exp_id,
             "frame_type": self.frame_type,
             "exp_time_s": self.exp_time_s,
+            "save_requested": self.save_requested,
             "state": self.state,
             "created_at_utc": self.created_at_utc,
             "started_at_utc": self.started_at_utc,

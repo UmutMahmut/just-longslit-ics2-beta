@@ -19,6 +19,7 @@ class ArmedExposure:
     exp_id: str
     exp_time_s: float
     frame_type: str
+    save_requested: bool
     operator_note: str | None = None
 
     def to_dict(self) -> dict:
@@ -27,6 +28,7 @@ class ArmedExposure:
             "exp_id": self.exp_id,
             "exp_time_s": self.exp_time_s,
             "frame_type": self.frame_type,
+            "save_requested": self.save_requested,
             "operator_note": self.operator_note,
         }
 
@@ -75,6 +77,7 @@ class DetectorSubsystem:
         *,
         exp_time_s: float,
         frame_type: str = "science",
+        save_requested: bool = False,
         operator_note: str | None = None,
         instrument_snapshot: dict | None = None,
         calibration_snapshot: dict | None = None,
@@ -108,6 +111,7 @@ class DetectorSubsystem:
         meta = ObservationMeta.create(
             frame_type=frame_type,
             exp_time_s=exp_time_s,
+            save_requested=save_requested,
             operator_note=operator_note,
             instrument_snapshot=instrument_snapshot,
             calibration_snapshot=calibration_snapshot,
@@ -123,6 +127,7 @@ class DetectorSubsystem:
             exp_id=meta.exp_id,
             exp_time_s=exp_time_s,
             frame_type=frame_type,
+            save_requested=save_requested,
             operator_note=operator_note,
         )
         self._state = ExposureState.ARMED
@@ -141,6 +146,7 @@ class DetectorSubsystem:
             exp_id=self._armed.exp_id,
             exp_time_s=self._armed.exp_time_s,
             frame_type=self._armed.frame_type,
+            save_requested=self._armed.save_requested,
         )
         self._state = ExposureState.EXPOSING
         self._observation_meta.mark_exposing()
@@ -189,6 +195,7 @@ class DetectorSubsystem:
             started_at_utc=result.get("started_at"),
             finished_at_utc=result.get("finished_at"),
             result="completed",
+            save_requested=self._armed.save_requested,
             quicklook_uri=result.get("quicklook_uri"),
             exists=bool(result.get("exists")),
             simulated=bool(result.get("simulated", False)),
@@ -237,6 +244,7 @@ class DetectorSubsystem:
             started_at_utc=self._observation_meta.started_at_utc,
             finished_at_utc=finished_at,
             result="discarded",
+            save_requested=self._armed.save_requested,
         )
 
         self._last_exposure = {
@@ -244,6 +252,7 @@ class DetectorSubsystem:
             "exp_id": self._armed.exp_id,
             "frame_type": self._armed.frame_type,
             "exp_time_s": self._armed.exp_time_s,
+            "save_requested": self._armed.save_requested,
             "operator_note": self._armed.operator_note,
             "frame_token": None,
             "started_at": self._observation_meta.started_at_utc,

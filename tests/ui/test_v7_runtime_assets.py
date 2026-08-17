@@ -58,7 +58,7 @@ def test_v7_runtime_assets_have_expected_panel_markers():
     assert "v7-presets-runtime" in presets.text
     assert "Guarded Apply" in presets.text
     assert "v7-observe-controls" in observe.text
-    assert "Exposure and Sequence Control" in observe.text
+    assert "3.0-transition-camera-roles" in observe.text
     assert "data-guard-available" in guard.text
     assert "fetch(" not in guard.text
     assert "new XMLHttpRequest" not in guard.text
@@ -144,8 +144,8 @@ def test_v7_observe_runtime_is_singleton_safe_and_skeleton_aware():
     assert "runtime.lastCommand" in observe.text
     assert "runtime.lastResult" in observe.text
     assert "runtime.lastError" in observe.text
-    assert "runtime-created-observe-skeleton" in observe.text
-    assert "createFallbackPanel" in observe.text
+    assert "runtime-created-observe-skeleton" not in observe.text
+    assert "createFallbackPanel" not in observe.text
     assert "enhancePanel" in observe.text
     assert "dataset.bound" in observe.text
     assert "justls:v7-observe-state" in observe.text

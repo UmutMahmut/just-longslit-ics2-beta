@@ -197,7 +197,6 @@
     setText('[data-bind="v7.instrument.calibration.flat"]', calibration.flat_lamp || calibration.flat || "off", "off");
     setText('[data-bind="v7.instrument.calibration.arc"]', calibration.arc_lamp || calibration.lamp || "not wired", "not wired");
     setText('[data-bind="v7.instrument.detector.profile"]', detector.profile_name, "unknown");
-    setText('[data-bind="v7.instrument.detector.save_enabled"]', booleanLabel(detector.save_enabled, "unknown"), "unknown");
     setText('[data-bind="v7.instrument.detector.trigger_mode"]', detector.trigger_mode, "unknown");
     setText('[data-bind="v7.instrument.detector.readout_mode"]', detector.readout_mode, "unknown");
     setText('[data-bind="v7.instrument.channel.B.enabled"]', bEnabled, "placeholder");
@@ -267,7 +266,7 @@
     bindSetup(data, operational, observation, detector);
     bindInstrument(data, detector);
     bindDiagnostics(data);
-    bindMessage(`Runtime status connected · ${rttLabel()} · request ${runtime.lastRequestId || "not available"}`, "Phase 2.9-F", "success");
+    bindMessage(`Runtime status connected · ${rttLabel()} · request ${runtime.lastRequestId || "not available"}`, "Phase 3.0-B Lite", "success");
   }
 
   async function refresh() {
@@ -309,7 +308,7 @@
     ensureSetupPanel();
     ensureRawPreview();
     bindConnectionDiagnostics();
-    bindMessage("Runtime status initializing...", "Phase 2.9-F", "info");
+    bindMessage("Runtime status initializing...", "Phase 3.0-B Lite", "info");
     window.addEventListener("justls:v7-local-refresh", refresh);
     if (runtime.started) {
       refresh();

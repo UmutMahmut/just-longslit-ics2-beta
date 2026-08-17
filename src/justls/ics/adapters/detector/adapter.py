@@ -19,6 +19,7 @@ class BaseDetectorAdapter(ABC):
         exp_id: str,
         exp_time_s: float,
         frame_type: str,
+        save_requested: bool,
     ) -> dict[str, Any]: ...
 
     @abstractmethod
@@ -57,12 +58,14 @@ class SimDetectorAdapter(BaseDetectorAdapter):
         exp_id: str,
         exp_time_s: float,
         frame_type: str,
+        save_requested: bool,
     ) -> dict[str, Any]:
         return self.driver.start_exposure(
             obs_id=obs_id,
             exp_id=exp_id,
             exp_time_s=exp_time_s,
             frame_type=frame_type,
+            save_requested=save_requested,
         )
 
     def finish_exposure(self) -> dict[str, Any]:
@@ -78,7 +81,7 @@ class SimDetectorAdapter(BaseDetectorAdapter):
         result["shared_capture_id"] = result["frame_token"]
         result["simulated"] = True
 
-        if self.writer is not None:
+        if result["save_requested"] and self.writer is not None:
             products = self.writer.write(
                 image,
                 obs_id=result["obs_id"],
@@ -116,11 +119,13 @@ class SimDetectorAdapter(BaseDetectorAdapter):
         obs_id: str,
         exp_time_s: float,
         frame_type: str,
+        save_requested: bool = True,
     ) -> dict[str, Any]:
         """Compatibility one-shot call retained for older adapter consumers."""
         result = self.driver.acquire_exposure(
             obs_id=obs_id,
             exp_time_s=exp_time_s,
             frame_type=frame_type,
+            save_requested=save_requested,
         )
         return self._complete(result)

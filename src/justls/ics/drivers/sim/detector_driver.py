@@ -35,6 +35,7 @@ class SimDetectorDriver:
         exp_id: str,
         exp_time_s: float,
         frame_type: str,
+        save_requested: bool,
     ) -> dict[str, Any]:
         with self._lock:
             if self._active is not None:
@@ -44,6 +45,7 @@ class SimDetectorDriver:
                 "exp_id": exp_id,
                 "frame_type": frame_type,
                 "exp_time_s": float(exp_time_s),
+                "save_requested": bool(save_requested),
                 "frame_token": f"frame-{uuid4().hex[:12]}",
                 "started_at": utc_now_iso(),
             }
@@ -94,11 +96,7 @@ class SimDetectorDriver:
     def get_latest_image(self) -> np.ndarray:
         with self._lock:
             if self._latest_image is None:
-                self._latest_image = synthetic_spectrum(
-                    width=self.config.width,
-                    height=self.config.height,
-                    seed_text="ics-beta-idle-preview",
-                )
+                raise RuntimeError("science camera has no completed acquisition")
             return self._latest_image.copy()
 
     def get_status(self) -> dict[str, Any]:
@@ -122,6 +120,7 @@ class SimDetectorDriver:
         obs_id: str,
         exp_time_s: float,
         frame_type: str,
+        save_requested: bool = True,
     ) -> dict[str, Any]:
         """Compatibility convenience for the original one-shot adapter contract."""
         self.start_exposure(
@@ -129,5 +128,6 @@ class SimDetectorDriver:
             exp_id=f"exp-{uuid4().hex[:12]}",
             exp_time_s=exp_time_s,
             frame_type=frame_type,
+            save_requested=save_requested,
         )
         return self.finish_exposure()

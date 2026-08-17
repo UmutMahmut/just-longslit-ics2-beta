@@ -1,4 +1,4 @@
-// v7 observe runtime adapter. Default-on during Phase 2.9-F.
+// v7 science single-exposure runtime adapter.
 
 (function () {
   "use strict";
@@ -31,82 +31,10 @@
     return String(value);
   }
 
-  function page() {
-    return document.querySelector('[data-page-panel="observe"]');
-  }
-
   function setText(node, value) {
     if (!node) return;
     const next = text(value, "");
     if (node.textContent !== next) node.textContent = next;
-  }
-
-  function createFallbackPanel() {
-    const host = page();
-    if (!host) return null;
-
-    const panel = document.createElement("section");
-    panel.id = "v7-observe-controls";
-    panel.className = "panel";
-    panel.setAttribute("data-role", "v7-observe-panel");
-    panel.setAttribute("data-origin", "runtime-created-observe-skeleton");
-    panel.setAttribute("data-phase", "2.9-F-operator-workflow");
-    panel.innerHTML = `
-      <h2>Observe - Exposure and Sequence Control</h2>
-      <div class="panel-body grid">
-        <div class="field-grid">
-          <label>Exposure Time (s)<input type="number" min="0.001" step="0.001" value="30" data-role="obs-exp-time" /></label>
-          <label>Frame Type<select data-role="obs-frame-type"><option value="science">science</option><option value="flat">flat</option><option value="arc">arc</option><option value="test">test</option></select></label>
-          <label style="grid-column: 1 / -1;">Operator Note<textarea data-role="obs-operator-note" placeholder="Optional note"></textarea></label>
-        </div>
-        <dl class="kv">
-          <dt>Status Endpoint</dt><dd><code>${STATUS_ENDPOINT}</code></dd>
-          <dt>Observation State</dt><dd><code data-bind="v7.observe.state">unknown</code></dd>
-          <dt>Armed Exposure</dt><dd><code data-bind="v7.observe.armed">not armed</code></dd>
-          <dt>Last Command</dt><dd><code data-bind="v7.observe.last_command">none</code></dd>
-          <dt>Request ID</dt><dd><code data-bind="v7.observe.request_id">not available</code></dd>
-          <dt>Latest Job</dt><dd><code data-bind="v7.observe.latest_job">not available</code></dd>
-          <dt>Last Error</dt><dd><code data-bind="v7.observe.last_error">none</code></dd>
-          <dt>Result Summary</dt><dd><code data-bind="v7.observe.result_summary">no command yet</code></dd>
-          <dt>Runtime State</dt><dd><code data-bind="v7.observe.runtime_state">idle</code></dd>
-        </dl>
-        <div class="badge-row">
-          <button class="btn" type="button" data-action="obs-preview">Preview</button>
-          <button class="btn primary" type="button" data-action="obs-arm">Arm</button>
-          <button class="btn primary" type="button" data-action="obs-start">Start</button>
-          <button class="btn" type="button" data-action="obs-finish">Finish</button>
-          <button class="btn" type="button" data-action="obs-stop-readout">Stop & Readout</button>
-          <button class="btn danger" type="button" data-action="obs-abort-discard">Abort & Discard</button>
-        </div>
-        <label><input type="checkbox" data-role="obs-abort-confirm" /> Enable abort/discard command</label>
-        <p style="margin: 0; color: var(--muted); font-size: 12px;">This baseline does not auto-finish at the requested exposure time. Use Finish or Stop &amp; Readout; timer-driven completion remains deferred.</p>
-        <section class="subpanel" data-role="v7-observe-preview-panel">
-          <h3>Observation Preview - Readiness / Validation</h3>
-          <dl class="kv">
-            <dt>Preview Endpoint</dt><dd><code>${PREVIEW_ENDPOINT}</code></dd>
-            <dt>Preview</dt><dd><code data-bind="v7.observe.preview.blocked">not checked</code></dd>
-            <dt>Execution</dt><dd><code data-bind="v7.observe.preview.single_exposure_compatible">not checked</code></dd>
-            <dt>Detector</dt><dd><code data-bind="v7.observe.preview.detector_state">unknown</code></dd>
-            <dt>Calibration</dt><dd><code data-bind="v7.observe.preview.calibration_state">not checked</code></dd>
-            <dt>Slit</dt><dd><code data-bind="v7.observe.preview.slit_state">unknown</code></dd>
-            <dt>TCS</dt><dd><code data-bind="v7.observe.preview.tcs_state">unavailable</code></dd>
-            <dt>Setup/Data</dt><dd><code data-bind="v7.observe.preview.setup_context">unknown</code></dd>
-            <dt>Issues</dt><dd><code data-bind="v7.observe.preview.issues">not checked</code></dd>
-            <dt>Summary</dt><dd><code data-bind="v7.observe.preview.summary">Preview has not been requested.</code></dd>
-          </dl>
-          <details class="dev-note" data-role="v7-observe-preview-raw">
-            <summary>Raw Preview JSON</summary>
-            <pre data-bind="v7.observe.preview.raw">No observation preview requested. Preview is side-effect-free and does not arm the detector.</pre>
-          </details>
-        </section>
-        <details class="dev-note" data-role="v7-observe-command-raw">
-          <summary>Raw Command JSON</summary>
-          <pre data-bind="v7.observe.result">No observation command sent.</pre>
-        </details>
-        <span class="badge live" data-bind="v7.observe.runtime_notice">Operator runtime initializing</span>
-      </div>`;
-    host.insertBefore(panel, host.firstChild);
-    return panel;
   }
 
   function bindPanelEvents(panel) {
@@ -137,7 +65,7 @@
   function enhancePanel(panel) {
     const firstEnable = panel.getAttribute("data-runtime") !== "enabled";
     panel.setAttribute("data-runtime", "enabled");
-    panel.setAttribute("data-phase", "2.9-F-operator-workflow");
+    panel.setAttribute("data-phase", "3.0-transition-camera-roles");
     bindPanelEvents(panel);
     if (firstEnable) setPanelButtonsDisabled(panel, false);
     return panel;
@@ -145,8 +73,7 @@
 
   function ensurePanel() {
     const existing = document.getElementById("v7-observe-controls");
-    const panel = existing || createFallbackPanel();
-    return panel ? enhancePanel(panel) : null;
+    return existing ? enhancePanel(existing) : null;
   }
 
   function bind(name) {
@@ -176,11 +103,22 @@
     setPanelButtonsDisabled(panel, value);
   }
 
+  function refreshSaveControl() {
+    const panel = ensurePanel();
+    const control = panel && panel.querySelector('[data-role="observe-save-products"]');
+    if (!control) return;
+    control.disabled = runtime.busy || control.dataset.singleLocked === "true" || control.dataset.sequenceLocked === "true";
+    const status = bind("v7.observe.save_status");
+    setText(status, control.checked ? "SAVING · FITS + quicklook to default location" : "NOT SAVING · frame remains in memory only");
+    if (status) status.className = control.checked ? "badge live" : "badge warn";
+  }
+
   function readArmPayload() {
     const panel = ensurePanel();
     const expInput = panel.querySelector('[data-role="obs-exp-time"]');
     const frameInput = panel.querySelector('[data-role="obs-frame-type"]');
     const noteInput = panel.querySelector('[data-role="obs-operator-note"]');
+    const saveInput = panel.querySelector('[data-role="observe-save-products"]');
 
     const expTime = Number(expInput && expInput.value);
     if (!Number.isFinite(expTime) || expTime <= 0) {
@@ -191,6 +129,7 @@
       exp_time_s: expTime,
       frame_type: frameInput ? frameInput.value : "science",
       operator_note: noteInput && noteInput.value ? noteInput.value : null,
+      save_requested: Boolean(saveInput && saveInput.checked),
     };
   }
 
@@ -414,12 +353,16 @@
 
   function renderStatus(payload) {
     runtime.lastStatus = payload || {};
-    const armed = runtime.lastStatus.armed_exposure || runtime.lastStatus.last_exposure || null;
+    const armed = runtime.lastStatus.armed_exposure || null;
     const record = runtime.lastStatus.latest_exposure_record || (runtime.lastStatus.observation_meta && runtime.lastStatus.observation_meta.exposure_record) || null;
+    const state = runtime.lastStatus.state || runtime.lastStatus.observation_state || "unknown";
+    const saveControl = ensurePanel().querySelector('[data-role="observe-save-products"]');
+    if (saveControl) saveControl.dataset.singleLocked = ["armed", "exposing", "reading_out"].includes(state) ? "true" : "false";
+    refreshSaveControl();
 
     setText(
       bind("v7.observe.state"),
-      runtime.lastStatus.state || runtime.lastStatus.observation_state || "unknown",
+      state,
     );
     setText(
       bind("v7.observe.armed"),
@@ -452,6 +395,9 @@
     runtime.lastRequestId = feedback.request_id || runtime.lastRequestId;
 
     bindStructuredResult(command, feedback, runtime.lastError);
+    if (command === "arm" && payload && payload.armed_exposure && payload.armed_exposure.save_requested) {
+      window.dispatchEvent(new CustomEvent("justls:v7-setup-refresh", { detail: { source: "single-exposure" } }));
+    }
     setText(
       bind("v7.observe.result"),
       JSON.stringify({
@@ -608,8 +554,19 @@
   }
 
   function start() {
-    ensurePanel();
+    const panel = ensurePanel();
     refreshRuntimeState();
+
+    const saveControl = panel && panel.querySelector('[data-role="observe-save-products"]');
+    if (saveControl && !saveControl.dataset.bound) {
+      saveControl.dataset.bound = "true";
+      saveControl.addEventListener("change", refreshSaveControl);
+    }
+    if (!runtime.saveLockBound) {
+      runtime.saveLockBound = true;
+      window.addEventListener("justls:v7-save-lock", refreshSaveControl);
+    }
+    refreshSaveControl();
 
     if (!runtime.localRefreshBound) {
       runtime.localRefreshBound = true;

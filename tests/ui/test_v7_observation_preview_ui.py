@@ -13,12 +13,11 @@ def test_v7_observe_static_shell_exposes_preview_panel() -> None:
     assert response.status_code == 200
     html = response.text
 
-    assert "Observation Preview - Readiness / Validation" in html
+    assert "Readiness / Validation" in html
     assert 'data-role="v7-observe-preview-raw"' in html
     assert 'data-role="v7-observe-command-raw"' in html
-    assert "Raw Preview JSON" in html
+    assert "Raw Readiness JSON" in html
     assert "Raw Command JSON" in html
-    assert "/api/v1/observation/preview" in html
     assert 'data-action="obs-preview"' in html
     assert 'data-role="v7-observe-preview-panel"' in html
     assert 'data-bind="v7.observe.preview.blocked"' in html
@@ -26,7 +25,8 @@ def test_v7_observe_static_shell_exposes_preview_panel() -> None:
     assert 'data-bind="v7.observe.preview.detector_state"' in html
     assert 'data-bind="v7.observe.preview.calibration_state"' in html
     assert 'data-bind="v7.observe.preview.issues"' in html
-    assert "Preview is side-effect-free and does not arm the detector." in html
+    assert "Check Readiness" in html
+    assert "the science acquisition path has no separate Preview lifecycle." in html
 
 
 def test_v7_observe_runtime_asset_binds_preview_endpoint_and_current_api_shape() -> None:
@@ -45,13 +45,7 @@ def test_v7_observe_runtime_asset_binds_preview_endpoint_and_current_api_shape()
     assert "function setPanelButtonsDisabled(panel, disabled)" in js
     assert "setPanelButtonsDisabled(panel, false)" in js
     assert "setPanelButtonsDisabled(panel, value)" in js
-    assert "Raw Preview JSON" in js
-    assert "Raw Command JSON" in js
-    assert "Raw Preview JSON" in js
-    assert "Raw Command JSON" in js
-    assert "function setPanelButtonsDisabled(panel, disabled)" in js
-    assert "setPanelButtonsDisabled(panel, false)" in js
-    assert "setPanelButtonsDisabled(panel, value)" in js
+    assert "save_requested" in js
     assert "single_exposure_compatible" in js
     assert "validation_issues" in js
     assert "readiness.detector" in js

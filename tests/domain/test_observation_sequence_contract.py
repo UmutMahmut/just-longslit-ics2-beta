@@ -51,3 +51,26 @@ def test_sequence_snapshot_exposes_progress_without_mutating_plan() -> None:
     assert snapshot.completed_steps == 0
     assert snapshot.current_exposure().exp_time_s == 5
     assert snapshot.to_status_dict()["current_exposure"]["exp_time_s"] == 5
+
+
+def test_sequence_snapshot_rejects_unsafe_durable_indices() -> None:
+    plan = ObservationPlan(
+        plan_id="plan-invalid-index",
+        exposures=[ExposureSpec(frame_type="science", exp_time_s=1)],
+    )
+
+    with pytest.raises(ValueError, match="current_index"):
+        SequenceExecutionSnapshot(plan=plan, current_index=2)
+
+
+def test_recovery_required_snapshot_requires_recovery_details() -> None:
+    plan = ObservationPlan(
+        plan_id="plan-invalid-recovery",
+        exposures=[ExposureSpec(frame_type="science", exp_time_s=1)],
+    )
+
+    with pytest.raises(ValueError, match="recovery details"):
+        SequenceExecutionSnapshot(
+            plan=plan,
+            state=SequenceExecutionState.RECOVERY_REQUIRED,
+        )

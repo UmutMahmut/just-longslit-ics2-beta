@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 from datetime import datetime, timezone
 from hashlib import sha256
+from threading import RLock
 from typing import Any
 
 import numpy as np
@@ -20,17 +21,33 @@ class SimPreviewCameraDriver:
 
     def __init__(self, config: CameraDeviceConfig) -> None:
         self.config = config
+        self._lock = RLock()
         self._sequence = 0
+        self._preview_enabled = True
+
+    def start_preview(self) -> dict[str, Any]:
+        with self._lock:
+            self._preview_enabled = True
+            return self.status()
+
+    def stop_preview(self) -> dict[str, Any]:
+        with self._lock:
+            self._preview_enabled = False
+            return self.status()
 
     def capture_jpeg(self) -> tuple[bytes, dict[str, Any]]:
-        self._sequence += 1
+        with self._lock:
+            if not self._preview_enabled:
+                raise RuntimeError("slit/guide preview is stopped")
+            self._sequence += 1
+            sequence = self._sequence
         height, width = self.config.height, self.config.width
-        rng = np.random.default_rng(self._sequence)
+        rng = np.random.default_rng(sequence)
         image = rng.normal(18.0, 3.0, size=(height, width))
 
         y, x = np.mgrid[:height, :width]
-        star_x = width * (0.47 + 0.015 * np.sin(self._sequence / 4.0))
-        star_y = height * (0.50 + 0.01 * np.cos(self._sequence / 5.0))
+        star_x = width * (0.47 + 0.015 * np.sin(sequence / 4.0))
+        star_y = height * (0.50 + 0.01 * np.cos(sequence / 5.0))
         halo = 205.0 * np.exp(
             -(
                 ((x - star_x) ** 2) / (2 * (width * 0.025) ** 2)
@@ -55,7 +72,7 @@ class SimPreviewCameraDriver:
             "device_id": self.config.device_id,
             "role": self.config.role,
             "driver": self.config.driver,
-            "sequence": self._sequence,
+            "sequence": sequence,
             "captured_at": captured_at,
             "width": width,
             "height": height,
@@ -63,15 +80,17 @@ class SimPreviewCameraDriver:
         }
 
     def status(self) -> dict[str, Any]:
-        return {
-            "device_id": self.config.device_id,
-            "role": self.config.role,
-            "driver": self.config.driver,
-            "model": self.config.model,
-            "serial": self.config.serial,
-            "state": "previewing",
-            "sequence": self._sequence,
-        }
+        with self._lock:
+            return {
+                "device_id": self.config.device_id,
+                "role": self.config.role,
+                "driver": self.config.driver,
+                "model": self.config.model,
+                "serial": self.config.serial,
+                "state": "previewing" if self._preview_enabled else "stopped",
+                "preview_enabled": self._preview_enabled,
+                "sequence": self._sequence,
+            }
 
 
 def synthetic_spectrum(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import wraps
 from typing import Any
 
 from justls.ics.application.dispatcher import DispatchResult
@@ -19,6 +20,15 @@ from justls.ics.kernel.errors import ICSException, InterlockBlockedError
 from justls.ics.kernel.jobs import CommandRequest
 from justls.ics.kernel.runtime import Runtime
 from justls.ics.kernel.states import CommandSource
+
+
+def _sequence_serialized(method):
+    @wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with self.runtime.sequence_lock:
+            return method(self, *args, **kwargs)
+
+    return wrapper
 
 
 class ObservationService:
@@ -50,6 +60,15 @@ class ObservationService:
     def _enforce_sequence_ownership(self, *, sequence_owned: bool) -> None:
         if sequence_owned:
             return
+        if self.runtime.sequence_persistence_error is not None:
+            raise InterlockBlockedError(
+                "Observation commands are blocked because durable sequence state could not be loaded.",
+                subsystem="detector",
+                details={
+                    "sequence_persistence_error": self.runtime.sequence_persistence_error,
+                    "sequence_persistence_path": self.runtime.sequence_persistence_path,
+                },
+            )
         sequence = self.runtime.sequence_execution
         if sequence is None or sequence.state.value in {
             "completed",
@@ -72,6 +91,16 @@ class ObservationService:
             return None, None
         context = self.setup_context_service.get_context()
         return context.to_persisted_dict(), context.data_preview()
+
+    def _reserve_single_frame(self) -> tuple[dict | None, dict | None]:
+        if self.setup_context_service is None:
+            return None, None
+        context = self.setup_context_service.get_context()
+        setup_context = context.to_persisted_dict()
+        data_preview = context.data_preview()
+        context.next_frame_index += 1
+        self.setup_context_service.save_context(context)
+        return setup_context, data_preview
 
     def _arm_preview_request(
         self,
@@ -286,12 +315,14 @@ class ObservationService:
             details=details,
         )
 
+    @_sequence_serialized
     def arm(
         self,
         *,
         exp_time_s: float,
         frame_type: str = "science",
         operator_note: str | None = None,
+        save_requested: bool = False,
         setup_context_override: dict | None = None,
         data_preview_override: dict | None = None,
         sequence_owned: bool = False,
@@ -302,6 +333,8 @@ class ObservationService:
             setup_context = setup_context_override
         if data_preview_override is not None:
             data_preview = data_preview_override
+        if not save_requested:
+            data_preview = None
 
         self._enforce_arm_preview_gate(
             exp_time_s=exp_time_s,
@@ -310,10 +343,14 @@ class ObservationService:
             setup_context=setup_context,
         )
 
+        if save_requested and not sequence_owned:
+            setup_context, data_preview = self._reserve_single_frame()
+
         params = {
             "exp_time_s": exp_time_s,
             "frame_type": frame_type,
             "operator_note": operator_note,
+            "save_requested": save_requested,
         }
         if setup_context is not None:
             params["setup_context"] = setup_context
@@ -328,6 +365,7 @@ class ObservationService:
         )
         return self.dispatcher.dispatch(request)
 
+    @_sequence_serialized
     def start(self, *, sequence_owned: bool = False) -> DispatchResult:
         self._enforce_sequence_ownership(sequence_owned=sequence_owned)
         request = CommandRequest.create(
@@ -338,6 +376,7 @@ class ObservationService:
         )
         return self.dispatcher.dispatch(request)
 
+    @_sequence_serialized
     def finish(self, *, sequence_owned: bool = False) -> DispatchResult:
         self._enforce_sequence_ownership(sequence_owned=sequence_owned)
         request = CommandRequest.create(
@@ -348,6 +387,7 @@ class ObservationService:
         )
         return self.dispatcher.dispatch(request)
 
+    @_sequence_serialized
     def stop_readout(self, *, sequence_owned: bool = False) -> DispatchResult:
         self._enforce_sequence_ownership(sequence_owned=sequence_owned)
         request = CommandRequest.create(
@@ -358,6 +398,7 @@ class ObservationService:
         )
         return self.dispatcher.dispatch(request)
 
+    @_sequence_serialized
     def abort_discard(self, *, sequence_owned: bool = False) -> DispatchResult:
         self._enforce_sequence_ownership(sequence_owned=sequence_owned)
         request = CommandRequest.create(

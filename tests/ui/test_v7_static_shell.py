@@ -10,7 +10,7 @@ def test_v7_static_shell_is_available_and_preserves_live_preview():
 
     assert response.status_code == 200
     assert "v7.1 Operator Console Prototype" in response.text
-    assert "Latest Exposure Preview" in response.text
+    assert "Slit / Guide Camera · Continuous Preview" in response.text
     assert "Instrument / Configure" in response.text
 
 
@@ -132,14 +132,50 @@ def test_v7_static_observe_page_has_single_runtime_enhanceable_skeleton():
     assert 'data-action="obs-start"' in response.text
     assert 'data-action="obs-stop-readout"' in response.text
     assert 'data-action="obs-abort-discard"' in response.text
-    assert "Observe · Exposure and Sequence Control" in response.text
+    assert "Science Acquisition Control" in response.text
     assert 'data-role="v7-observe-sequence-panel"' in response.text
     assert 'data-bind="v7.observe.record.fits"' in response.text
     assert 'data-role="sequence-abort-confirm"' in response.text
+    assert 'data-role="sequence-mark-failed-confirm"' in response.text
+    assert 'data-action="sequence-retry-current-step"' in response.text
+    assert 'data-action="sequence-mark-failed"' in response.text
+    assert 'data-bind="v7.sequence.persistence"' in response.text
+    assert 'data-bind="v7.sequence.recovery"' in response.text
+    assert 'data-bind="v7.sequence.reservation"' in response.text
     assert 'data-bind="v7.sequence.latest_job"' in response.text
     assert 'data-bind="v7.sequence.last_error"' in response.text
     assert "does not schedule timer-based completion" in response.text
+    assert "Phase 3.0-B Lite operator workflow" in response.text
+    assert "Durable sequence recovery active" in response.text
     assert "Buttons are static until Phase 2.8-F binding" not in response.text
+
+
+def test_v7_observe_shell_preserves_compact_slit_over_bgr_camera_layout():
+    html = TestClient(app).get("/ui/v7").text
+
+    assert 'data-action="observe-mode-single"' in html
+    assert 'data-action="observe-mode-sequence"' in html
+    assert 'data-observe-mode-panel="single"' in html
+    assert 'data-observe-mode-panel="sequence" hidden' in html
+    assert 'data-role="observe-save-products"' in html
+    assert 'data-role="observe-save-products" checked' not in html
+    assert 'data-role="slit-preview-enabled" checked' in html
+    assert 'class="panel observe-camera-panel"' in html
+    assert 'class="live-preview slit-preview"' in html
+    assert "--observe-slit-height:" in html
+    assert "--observe-bgr-height:" in html
+    assert "justify-content: space-between" in html
+    assert "height: var(--observe-slit-height)" in html
+    assert "height: var(--observe-bgr-height)" in html
+    assert ".observe-camera-stack { justify-content: flex-start; }" in html
+    assert html.count('data-role="science-channel-image"') == 3
+    assert 'data-ics-camera-src="/camera/b/latest.jpg"' in html
+    assert 'data-ics-camera-src="/camera/g/latest.jpg"' in html
+    assert 'data-ics-camera-src="/camera/r/latest.jpg"' in html
+    assert "Beta: one shared science-camera source feeds B/G/R" in html
+    assert "B/G/R layout remains ready for three independent science cameras" in html
+    assert 'data-role="science-latest-image"' not in html
+    assert "the science acquisition path has no separate Preview lifecycle." in html
 
 def test_v7_default_shell_exposes_unified_command_feedback_static_bindings():
     client = TestClient(app)

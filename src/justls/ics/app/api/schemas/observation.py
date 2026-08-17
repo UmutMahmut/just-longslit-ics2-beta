@@ -10,9 +10,12 @@ from .observation_preview import ObservationPreviewResponse, ValidationIssueResp
 
 
 class ObservationArmReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     exp_time_s: float = Field(..., gt=0)
     frame_type: Literal["science", "flat", "arc", "test"] = "science"
     operator_note: str | None = None
+    save_requested: bool = False
 
 
 ObservationCommandLiteral = Literal[

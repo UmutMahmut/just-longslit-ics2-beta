@@ -1660,14 +1660,6 @@ html.theme-light .warning:hover {
                 </div>
 
                 <div class="field">
-                  <label>save_enabled</label>
-                  <select data-input="detector.saveEnabled">
-                    <option value="true">true</option>
-                    <option value="false">false</option>
-                  </select>
-                </div>
-
-                <div class="field">
                   <label>trigger_mode</label>
                   <select data-input="detector.triggerMode">
                     <option value="internal">internal</option>
@@ -2067,7 +2059,6 @@ html.theme-light .warning:hover {
     const calibrationLampSelect = document.querySelector('[data-input="calibration.lamp"]');
 
     const detectorProfileNameInput = document.querySelector('[data-input="detector.profileName"]');
-    const detectorSaveEnabledSelect = document.querySelector('[data-input="detector.saveEnabled"]');
     const detectorTriggerModeSelect = document.querySelector('[data-input="detector.triggerMode"]');
     const detectorReadoutModeInput = document.querySelector('[data-input="detector.readoutMode"]');
 
@@ -2608,7 +2599,6 @@ html.theme-light .warning:hover {
       const cfg = detectorConfig || {};
 
       if (detectorProfileNameInput && document.activeElement !== detectorProfileNameInput) detectorProfileNameInput.value = safe(cfg.profile_name, 'default');
-      if (detectorSaveEnabledSelect && document.activeElement !== detectorSaveEnabledSelect) detectorSaveEnabledSelect.value = String(Boolean(cfg.save_enabled ?? true));
       if (detectorTriggerModeSelect && document.activeElement !== detectorTriggerModeSelect && cfg.trigger_mode) detectorTriggerModeSelect.value = cfg.trigger_mode;
       if (detectorReadoutModeInput && document.activeElement !== detectorReadoutModeInput) detectorReadoutModeInput.value = safe(cfg.readout_mode, 'normal');
 
@@ -2854,7 +2844,6 @@ html.theme-light .warning:hover {
     function collectDetectorConfigPayload() {
       return {
         profile_name: detectorProfileNameInput?.value?.trim() || 'default',
-        save_enabled: (detectorSaveEnabledSelect?.value || 'true') === 'true',
         trigger_mode: detectorTriggerModeSelect?.value || 'internal',
         readout_mode: detectorReadoutModeInput?.value?.trim() || 'normal',
         channels: {

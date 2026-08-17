@@ -1,4 +1,4 @@
-// v7 setup runtime adapter. Default-on during Phase 2.9-F.
+// v7 setup runtime adapter. Default-on for the active operator workflow.
 
 (function () {
   "use strict";
@@ -223,6 +223,7 @@
     page.setAttribute("data-runtime", "enabled");
     bindEvents();
     refreshButtons();
+    window.addEventListener("justls:v7-setup-refresh", loadContext);
     loadContext();
   }
 

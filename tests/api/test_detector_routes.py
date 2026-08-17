@@ -61,7 +61,6 @@ def test_api_set_detector_config():
         "/api/v1/detector/config",
         json={
             "profile_name": "rgb-safe-default",
-            "save_enabled": True,
             "trigger_mode": "internal",
             "readout_mode": "normal",
             "channels": {
@@ -92,7 +91,6 @@ def test_api_detector_config_invalid_payload_returns_422():
         "/api/v1/detector/config",
         json={
             "profile_name": "bad",
-            "save_enabled": True,
             "trigger_mode": "invalid",
             "readout_mode": "normal",
             "channels": {

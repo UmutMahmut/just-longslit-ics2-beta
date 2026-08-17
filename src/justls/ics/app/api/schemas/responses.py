@@ -159,6 +159,7 @@ class FrameRecordResponse(BaseModel):
     kept: bool
     early_stop: bool
     discarded: bool
+    save_requested: bool = True
     started_at_utc: str | None = None
     finished_at_utc: str | None = None
     data_product: DataProductRefResponse
@@ -183,6 +184,7 @@ class ExposureRecordResponse(BaseModel):
     started_at_utc: str | None = None
     finished_at_utc: str | None = None
     data_product_state: str
+    save_requested: bool = True
     frames: list[FrameRecordResponse] = Field(default_factory=list)
     primary_data_product: DataProductRefResponse | None = None
     quicklook: DataProductRefResponse | None = None

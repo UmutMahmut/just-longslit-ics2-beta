@@ -77,6 +77,7 @@ def test_detector_finish_normal_flow():
     runtime.detector.arm(
         exp_time_s=30.0,
         frame_type="science",
+        save_requested=True,
         operator_note="finish-case",
         instrument_snapshot={"slit_width_um": 120.0, "slit_angle_deg": 0.0},
         calibration_snapshot={"mode": "science", "active_lamp": None, "lamp_enabled": False, "mirror_inserted": False},

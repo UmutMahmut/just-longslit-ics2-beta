@@ -122,7 +122,6 @@ def test_armed_blocks_detector_config_mutation():
         "/api/v1/detector/config",
         json={
             "profile_name": "locked-armed",
-            "save_enabled": True,
             "trigger_mode": "internal",
             "readout_mode": "normal",
             "channels": {
@@ -201,7 +200,6 @@ def test_exposing_blocks_detector_preset_and_slit_mutation():
         "/api/v1/detector/config",
         json={
             "profile_name": "locked-exposing",
-            "save_enabled": True,
             "trigger_mode": "internal",
             "readout_mode": "normal",
             "channels": {

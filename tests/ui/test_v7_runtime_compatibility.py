@@ -159,11 +159,11 @@ def test_v7_observe_runtime_and_guard_assets_target_existing_observe_skeleton():
     assert 'data-role="obs-frame-type"' in runtime_js
     assert 'data-role="obs-operator-note"' in runtime_js
     assert 'data-role="obs-abort-confirm"' in runtime_js
-    assert 'data-action="obs-arm"' in runtime_js
-    assert 'data-action="obs-start"' in runtime_js
-    assert 'data-action="obs-finish"' in runtime_js
-    assert 'data-action="obs-stop-readout"' in runtime_js
-    assert 'data-action="obs-abort-discard"' in runtime_js
+    assert '["obs-arm", arm]' in runtime_js
+    assert '["obs-start", () => postCommand("start", START_ENDPOINT)]' in runtime_js
+    assert '["obs-finish", () => postCommand("finish", FINISH_ENDPOINT)]' in runtime_js
+    assert '["obs-stop-readout", () => postCommand("stop_readout", STOP_READOUT_ENDPOINT)]' in runtime_js
+    assert '["obs-abort-discard", abortDiscard]' in runtime_js
     assert "FINISH_ENDPOINT" in runtime_js
     assert "/api/v1/observation/finish" in runtime_js
     assert "v7.observe.request_id" in runtime_js
@@ -173,6 +173,8 @@ def test_v7_observe_runtime_and_guard_assets_target_existing_observe_skeleton():
     assert "isCommandFeedback" in runtime_js
     assert "commandFeedbackSummary" in runtime_js
     assert "renderCommandFeedback" in runtime_js
+    assert "runtime.lastStatus.armed_exposure || null" in runtime_js
+    assert "armed_exposure || runtime.lastStatus.last_exposure" not in runtime_js
     assert "blocked_components" in runtime_js
     assert "blocked_reason" in runtime_js
     assert "validation_issues" in runtime_js
@@ -203,13 +205,40 @@ def test_v7_sequence_runtime_targets_audited_sequence_api_and_panel():
     assert "/api/v1/observation/sequence/pause" in js
     assert "/api/v1/observation/sequence/resume" in js
     assert "/api/v1/observation/sequence/abort" in js
+    assert "/api/v1/observation/sequence/retry_current_step" in js
+    assert "/api/v1/observation/sequence/mark_failed" in js
     assert "x-request-id" in js
     assert "step_results" in js
     assert "previewPlan" in js
     assert "readPlanForLoad" in js
     assert 'data-role="sequence-abort-confirm"' in js
+    assert 'data-role="sequence-mark-failed-confirm"' in js
+    assert "recovery_required" in js
     assert "justls:v7-sequence-state" in js
+    assert "justls:v7-setup-refresh" in js
     assert "latest_job" in js
+    assert "save_requested" in js
+    assert "sequenceLocked" in js
+    assert 'setMode("sequence")' in js
+    assert "v7.sequence.reservation" in js
+
+    setup = client.get("/ui-assets/v7/setup_runtime.js")
+    assert setup.status_code == 200
+    assert 'window.addEventListener("justls:v7-setup-refresh", loadContext)' in setup.text
+
+
+def test_v7_camera_runtime_only_polls_slit_preview_and_refreshes_completed_science_frames():
+    js = TestClient(app).get("/ui-assets/v7/camera_runtime.js").text
+
+    assert 'START_ENDPOINT = "/api/v1/cameras/slit/preview/start"' in js
+    assert 'STOP_ENDPOINT = "/api/v1/cameras/slit/preview/stop"' in js
+    assert 'SLIT_FRAME_ENDPOINT = "/camera/slit/latest.jpg"' in js
+    assert 'data-role="slit-preview-enabled"' in js
+    assert 'data-role="science-channel-image"' in js
+    assert "querySelectorAll" in js
+    assert 'data-role="science-latest-image"' not in js
+    assert "justls:v7-observe-state" in js
+    assert 'img[src^="/camera/"]' not in js
 
 
 def test_v7_observe_runtime_refreshes_after_sequence_commands_and_guard_owns_direct_controls():

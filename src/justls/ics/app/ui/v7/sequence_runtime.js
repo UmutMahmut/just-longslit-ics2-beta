@@ -13,6 +13,8 @@
     stop_readout_step: "/api/v1/observation/sequence/stop_readout_step",
     pause: "/api/v1/observation/sequence/pause",
     resume: "/api/v1/observation/sequence/resume",
+    retry_current_step: "/api/v1/observation/sequence/retry_current_step",
+    mark_failed: "/api/v1/observation/sequence/mark_failed",
     abort: "/api/v1/observation/sequence/abort",
   };
 
@@ -30,6 +32,43 @@
 
   function panel() {
     return document.querySelector('[data-role="v7-observe-sequence-panel"]');
+  }
+
+  function observePanel() {
+    return document.getElementById("v7-observe-controls");
+  }
+
+  function saveControl() {
+    const host = observePanel();
+    return host && host.querySelector('[data-role="observe-save-products"]');
+  }
+
+  function sequenceLocked() {
+    const state = runtime.snapshot && runtime.snapshot.state;
+    return Boolean(state) && !["completed", "aborted", "failed"].includes(state);
+  }
+
+  function setMode(mode) {
+    const host = observePanel();
+    if (!host || (mode === "single" && sequenceLocked())) return;
+    host.querySelectorAll("[data-observe-mode-panel]").forEach((section) => {
+      section.hidden = section.getAttribute("data-observe-mode-panel") !== mode;
+    });
+    host.querySelectorAll('[data-action^="observe-mode-"]').forEach((button) => {
+      button.setAttribute("aria-selected", button.dataset.action === `observe-mode-${mode}` ? "true" : "false");
+    });
+  }
+
+  function refreshWorkspace() {
+    const host = observePanel();
+    if (!host) return;
+    const locked = sequenceLocked();
+    const singleButton = host.querySelector('[data-action="observe-mode-single"]');
+    if (singleButton) singleButton.disabled = locked;
+    const save = saveControl();
+    if (save) save.dataset.sequenceLocked = locked ? "true" : "false";
+    window.dispatchEvent(new CustomEvent("justls:v7-save-lock"));
+    if (locked) setMode("sequence");
   }
 
   function setText(node, value) {
@@ -57,16 +96,20 @@
       if (!Number.isFinite(expTime) || expTime <= 0) throw new Error(`Step ${index + 1}: exposure time must be positive.`);
       return { frame_type: frameType, exp_time_s: expTime, label: labelParts.join(",") || null };
     });
-    return { exposures };
+    const save = saveControl();
+    return { exposures, save_requested: Boolean(save && save.checked) };
   }
 
   function plansMatch(left, right) {
     if (!left || !right || !Array.isArray(left.exposures) || !Array.isArray(right.exposures)) return false;
-    const normalize = (plan) => plan.exposures.map((exposure) => ({
-      frame_type: exposure.frame_type,
-      exp_time_s: Number(exposure.exp_time_s),
-      label: exposure.label || null,
-    }));
+    const normalize = (plan) => ({
+      save_requested: Boolean(plan.save_requested),
+      exposures: plan.exposures.map((exposure) => ({
+        frame_type: exposure.frame_type,
+        exp_time_s: Number(exposure.exp_time_s),
+        label: exposure.label || null,
+      })),
+    });
     return JSON.stringify(normalize(left)) === JSON.stringify(normalize(right));
   }
 
@@ -107,6 +150,7 @@
       setBinding("v7.sequence.state", payload.blocked ? "blocked preview" : "preview ready");
       setBinding("v7.sequence.progress", `0 / ${payload.steps.length}`);
       setBinding("v7.sequence.current", payload.steps.length ? "step 1 pending" : "not available");
+      setBinding("v7.sequence.reservation", payload.plan.save_requested ? "reserved when plan is loaded" : "not reserved (NOT SAVING)");
       setBinding("v7.sequence.summary", payload.executable ? `${payload.steps.length} steps ready to load.` : "Plan is blocked; inspect readiness details.");
       refreshButtons();
       return;
@@ -120,16 +164,32 @@
       return;
     }
     const total = current.plan && current.plan.exposures ? current.plan.exposures.length : 0;
+    const save = saveControl();
+    if (save) save.checked = Boolean(current.plan && current.plan.save_requested);
     const completed = (current.step_results || []).filter((step) => step.state === "completed").length;
     const exposure = current.current_index < total ? current.plan.exposures[current.current_index] : null;
     setBinding("v7.sequence.plan_id", current.plan.plan_id);
     setBinding("v7.sequence.state", current.state);
     setBinding("v7.sequence.progress", `${completed} / ${total}`);
     setBinding("v7.sequence.current", exposure ? `${current.current_index + 1}: ${exposure.frame_type} ${exposure.exp_time_s} s${current.active_exposure ? " (active)" : ""}` : "complete");
+    const reservation = current.frame_reservation;
+    setBinding(
+      "v7.sequence.reservation",
+      reservation
+        ? `${reservation.start_index}-${reservation.end_index_exclusive - 1}`
+        : (current.plan.save_requested ? "saving; no setup range" : "not reserved (NOT SAVING)"),
+    );
+    setBinding("v7.sequence.persistence", current.last_persisted_at_utc ? `saved ${current.last_persisted_at_utc}${current.restored_at_utc ? `; restored ${current.restored_at_utc}` : ""}` : "not yet saved");
+    const recovery = current.recovery;
+    setBinding("v7.sequence.recovery", recovery ? `${recovery.reason}; retry ${recovery.retry_allowed ? "allowed" : "blocked"}; actions ${(recovery.allowed_actions || []).join(", ")}` : "not required");
     setBinding("v7.sequence.summary", runtime.lastError || current.message || `${command}: completed`);
     refreshButtons();
+    refreshWorkspace();
     broadcastSnapshot(current);
     window.dispatchEvent(new CustomEvent("justls:v7-local-refresh", { detail: { source: "sequence", command } }));
+    if (command === "load" && payload && payload.ok) {
+      window.dispatchEvent(new CustomEvent("justls:v7-setup-refresh", { detail: { source: "sequence" } }));
+    }
   }
 
   function setBusy(value) {
@@ -150,6 +210,8 @@
     const active = Boolean(snapshot && snapshot.active_exposure);
     const terminal = ["completed", "aborted", "failed"].includes(state);
     const abortConfirmed = Boolean(host.querySelector('[data-role="sequence-abort-confirm"]:checked'));
+    const markFailedConfirmed = Boolean(host.querySelector('[data-role="sequence-mark-failed-confirm"]:checked'));
+    const recovery = snapshot && snapshot.recovery;
     const rules = {
       "sequence-preview": !runtime.busy,
       "sequence-load": !runtime.busy && (!snapshot || terminal),
@@ -158,6 +220,8 @@
       "sequence-stop-readout-step": !runtime.busy && active,
       "sequence-pause": !runtime.busy && ["loaded", "running"].includes(state),
       "sequence-resume": !runtime.busy && state === "paused",
+      "sequence-retry-current-step": !runtime.busy && state === "recovery_required" && Boolean(recovery && recovery.retry_allowed),
+      "sequence-mark-failed": !runtime.busy && state === "recovery_required" && markFailedConfirmed,
       "sequence-abort": !runtime.busy && Boolean(snapshot) && !terminal && abortConfirmed,
     };
     Object.entries(rules).forEach(([name, allowed]) => {
@@ -167,6 +231,7 @@
         button.setAttribute("data-sequence-available", allowed ? "true" : "false");
       }
     });
+    refreshWorkspace();
   }
 
   async function request(command, body) {
@@ -205,6 +270,19 @@
     refreshButtons();
   }
 
+  async function markFailedSequence() {
+    const host = panel();
+    const confirm = host && host.querySelector('[data-role="sequence-mark-failed-confirm"]');
+    if (!confirm || !confirm.checked) {
+      runtime.lastError = "Explicit Mark Failed checkbox is required.";
+      render({ error: { code: "confirmation_required", message: runtime.lastError } }, "mark_failed");
+      return;
+    }
+    const payload = await request("mark_failed");
+    if (payload && payload.ok) confirm.checked = false;
+    refreshButtons();
+  }
+
   function bindEvents() {
     const host = panel();
     if (!host) return;
@@ -216,6 +294,8 @@
       "sequence-stop-readout-step": () => request("stop_readout_step"),
       "sequence-pause": () => request("pause"),
       "sequence-resume": () => request("resume"),
+      "sequence-retry-current-step": () => request("retry_current_step"),
+      "sequence-mark-failed": markFailedSequence,
       "sequence-abort": abortSequence,
     };
     Object.entries(actions).forEach(([name, handler]) => {
@@ -235,10 +315,26 @@
       abortConfirm.dataset.bound = "true";
       abortConfirm.addEventListener("change", refreshButtons);
     }
+    const markFailedConfirm = host.querySelector('[data-role="sequence-mark-failed-confirm"]');
+    if (markFailedConfirm && !markFailedConfirm.dataset.bound) {
+      markFailedConfirm.dataset.bound = "true";
+      markFailedConfirm.addEventListener("change", refreshButtons);
+    }
     const planInput = host.querySelector('[data-role="sequence-plan-steps"]');
     if (planInput && !planInput.dataset.previewBound) {
       planInput.dataset.previewBound = "true";
       planInput.addEventListener("input", () => { runtime.previewPlan = null; });
+    }
+    const save = saveControl();
+    if (save && !save.dataset.sequenceBound) {
+      save.dataset.sequenceBound = "true";
+      save.addEventListener("change", () => { runtime.previewPlan = null; });
+    }
+    const observe = observePanel();
+    if (observe && !observe.dataset.modeBound) {
+      observe.dataset.modeBound = "true";
+      observe.querySelector('[data-action="observe-mode-single"]')?.addEventListener("click", () => setMode("single"));
+      observe.querySelector('[data-action="observe-mode-sequence"]')?.addEventListener("click", () => setMode("sequence"));
     }
   }
 
@@ -247,6 +343,7 @@
     if (!host) return;
     host.setAttribute("data-runtime", "enabled");
     bindEvents();
+    setMode("single");
     refreshButtons();
     if (runtime.started) return;
     runtime.started = true;

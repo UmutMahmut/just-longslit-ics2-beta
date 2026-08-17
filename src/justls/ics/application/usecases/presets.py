@@ -18,7 +18,6 @@ def build_science_default_preset() -> PresetPlan:
         detector_config=DetectorConfig.model_validate(
             {
                 "profile_name": "science-default",
-                "save_enabled": True,
                 "trigger_mode": "internal",
                 "readout_mode": "normal",
                 "channels": {
@@ -47,7 +46,6 @@ def build_rgb_safe_default_preset() -> PresetPlan:
         detector_config=DetectorConfig.model_validate(
             {
                 "profile_name": "rgb-safe-default",
-                "save_enabled": True,
                 "trigger_mode": "internal",
                 "readout_mode": "normal",
                 "channels": {
@@ -76,7 +74,6 @@ def build_engineering_all_channels_off_preset() -> PresetPlan:
         detector_config=DetectorConfig.model_validate(
             {
                 "profile_name": "engineering-all-off",
-                "save_enabled": False,
                 "trigger_mode": "simulated",
                 "readout_mode": "normal",
                 "channels": {
@@ -105,7 +102,6 @@ def build_calib_flat_default_preset() -> PresetPlan:
         detector_config=DetectorConfig.model_validate(
             {
                 "profile_name": "calib-flat-default",
-                "save_enabled": True,
                 "trigger_mode": "internal",
                 "readout_mode": "normal",
                 "channels": {

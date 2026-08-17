@@ -65,7 +65,7 @@ def test_runtime_default_detector_config_exists():
     cfg = runtime.get_detector_config_dict()
 
     assert cfg["profile_name"] == "campus-beta-shared-camera"
-    assert cfg["save_enabled"] is True
+    assert "save_enabled" not in cfg
     assert cfg["trigger_mode"] == "simulated"
     assert cfg["readout_mode"] == "normal"
     assert cfg["shared_physical_camera"] is True
@@ -82,7 +82,6 @@ def test_runtime_can_update_detector_config():
     updated = runtime.set_detector_config(
         {
             "profile_name": "rgb-safe-default",
-            "save_enabled": True,
             "trigger_mode": "internal",
             "readout_mode": "normal",
             "channels": {

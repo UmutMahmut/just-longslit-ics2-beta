@@ -44,7 +44,6 @@ def test_services_read_runtime_state_calibration_observation_and_detector_config
     runtime.set_detector_config(
         {
             "profile_name": "rgb-safe-default",
-            "save_enabled": True,
             "trigger_mode": "internal",
             "readout_mode": "normal",
             "channels": {

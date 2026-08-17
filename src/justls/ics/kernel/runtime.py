@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from threading import RLock
 from typing import Any
 
 from justls.ics.adapters.camera.adapter import SimPreviewCameraAdapter
@@ -66,6 +67,10 @@ class Runtime:
     detector_config: DetectorConfig = field(default_factory=build_default_detector_config)
     job_tracker: JobTracker = field(default_factory=JobTracker)
     sequence_execution: SequenceExecutionSnapshot | None = None
+    sequence_execution_loaded: bool = False
+    sequence_persistence_path: str | None = None
+    sequence_persistence_error: str | None = None
+    sequence_lock: RLock = field(default_factory=RLock, repr=False)
     started_at: datetime = field(default_factory=utc_now)
 
     def get_snapshot(self) -> SystemStateSnapshot:

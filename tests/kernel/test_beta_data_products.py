@@ -17,6 +17,7 @@ def test_completed_exposure_writes_valid_fits_blocks_and_quicklook() -> None:
     runtime.detector.arm(
         exp_time_s=2.5,
         frame_type="science",
+        save_requested=True,
         detector_config=runtime.get_detector_config_dict(),
     )
     runtime.detector.start()
@@ -32,6 +33,29 @@ def test_completed_exposure_writes_valid_fits_blocks_and_quicklook() -> None:
     assert quicklook_path.exists()
     assert quicklook_path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
     assert len(record["primary_data_product"]["checksum"]) == 64
+
+
+def test_completed_unsaved_exposure_stays_in_memory_without_files() -> None:
+    runtime = RuntimeAssembler().build()
+    data_root = Path(runtime.data_root)
+    before = set(data_root.rglob("*")) if data_root.exists() else set()
+    runtime.detector.arm(
+        exp_time_s=0.1,
+        frame_type="test",
+        save_requested=False,
+        detector_config=runtime.get_detector_config_dict(),
+    )
+    runtime.detector.start()
+    completed = runtime.detector.finish_normal()
+
+    record = completed.latest_exposure_record
+    assert record["save_requested"] is False
+    assert record["data_product_state"] == "not_requested"
+    assert record["primary_data_product"]["uri"] is None
+    assert record["quicklook"] is None
+    assert runtime.detector.adapter.get_latest_preview()[0].startswith(b"\x89PNG")
+    after = set(data_root.rglob("*")) if data_root.exists() else set()
+    assert after == before
 
 
 def test_abort_after_start_clears_hardware_exposure_without_product() -> None:

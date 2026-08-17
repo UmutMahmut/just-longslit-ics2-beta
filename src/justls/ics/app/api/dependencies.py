@@ -16,6 +16,11 @@ from justls.ics.application.services.observation_service import ObservationServi
 from justls.ics.application.services.observation_sequence_service import (
     ObservationSequenceService,
 )
+from justls.ics.application.services.observation_sequence_store import (
+    JsonObservationSequenceStore,
+    ObservationSequenceStore,
+    initialize_runtime_sequence,
+)
 from justls.ics.application.services.observation_preview_service import ObservationPreviewService
 from justls.ics.application.services.setup_context_service import SetupContextService
 from justls.ics.application.services.setup_context_store import JsonSetupContextStore
@@ -25,10 +30,19 @@ from justls.ics.kernel.runtime import Runtime, get_runtime
 
 SETUP_CONTEXT_PATH_ENV = "JUSTLS_SETUP_CONTEXT_PATH"
 DEFAULT_SETUP_CONTEXT_PATH = Path(".justls") / "setup_context.json"
+SEQUENCE_STATE_PATH_ENV = "JUSTLS_SEQUENCE_STATE_PATH"
+DEFAULT_SEQUENCE_STATE_PATH = Path(".justls") / "sequence_execution.json"
 
 
 def get_runtime_dependency() -> Runtime:
-    return get_runtime()
+    runtime = get_runtime()
+    path = get_sequence_state_path()
+    initialize_runtime_sequence(
+        runtime,
+        JsonObservationSequenceStore(path),
+        persistence_path=str(path),
+    )
+    return runtime
 
 
 RuntimeDep = Annotated[Runtime, Depends(get_runtime_dependency)]
@@ -51,6 +65,17 @@ def get_setup_context_path() -> Path:
     if raw_path and raw_path.strip():
         return Path(raw_path.strip())
     return DEFAULT_SETUP_CONTEXT_PATH
+
+
+def get_sequence_state_path() -> Path:
+    raw_path = os.getenv(SEQUENCE_STATE_PATH_ENV)
+    if raw_path and raw_path.strip():
+        return Path(raw_path.strip())
+    return DEFAULT_SEQUENCE_STATE_PATH
+
+
+def get_observation_sequence_store() -> ObservationSequenceStore:
+    return JsonObservationSequenceStore(get_sequence_state_path())
 
 
 def get_setup_context_service() -> SetupContextService:
@@ -189,6 +214,7 @@ def _handle_observation_arm(runtime: Runtime, request):
     snapshot = detector.arm(
         exp_time_s=float(request.params["exp_time_s"]),
         frame_type=str(request.params["frame_type"]),
+        save_requested=bool(request.params.get("save_requested", False)),
         operator_note=request.params.get("operator_note"),
         instrument_snapshot=instrument_snapshot,
         calibration_snapshot=calibration_snapshot,
@@ -247,6 +273,10 @@ ObservatoryContextServiceDep = Annotated[
     Depends(get_observatory_context_service),
 ]
 SetupContextServiceDep = Annotated[SetupContextService, Depends(get_setup_context_service)]
+ObservationSequenceStoreDep = Annotated[
+    ObservationSequenceStore,
+    Depends(get_observation_sequence_store),
+]
 
 def get_observation_preview_service(
     runtime: RuntimeDep,
@@ -278,12 +308,14 @@ def get_observation_sequence_service(
     observation_service: ObservationServiceDep,
     observation_preview_service: ObservationPreviewServiceDep,
     setup_context_service: SetupContextServiceDep,
+    sequence_store: ObservationSequenceStoreDep,
 ) -> ObservationSequenceService:
     return ObservationSequenceService(
         runtime,
         observation_service,
         observation_preview_service,
         setup_context_service,
+        sequence_store,
     )
 
 

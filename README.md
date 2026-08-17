@@ -9,13 +9,13 @@ spectrograph.
 
 ## Current baseline
 
-Current code baseline: simulator-backed operator workflow and observation-sequence contract.
+Current code baseline: simulator-backed science acquisition, independent slit/guide live preview, durable operator-stepped sequence state, and conservative restart recovery.
 
 Validation baseline:
 
 ```text
 pytest -q
-265 passed
+292 passed
 ```
 
 Current default UI behavior:
@@ -28,7 +28,7 @@ Current default UI behavior:
 /ui/v6     -> v6 review shell
 ```
 
-`/ui` and `/ui/v7` load the complete operator-safe v7 runtime by default: status, Setup, Instrument, Presets, Observe, sequence control, camera preview, and Observe guards. The runtime master gate still provides a fully static fallback shell.
+`/ui` and `/ui/v7` load the complete operator-safe v7 runtime by default. Observe keeps the instrument-facing layout: a slit/guide preview above three B/G/R science panes, with Single/Sequence controls on the right. During beta development the B/G/R panes deliberately mirror the same completed shared science-camera readout; the three-pane structure and logical-channel endpoints are retained for the future independent cameras. The science acquisition path has no separate preview lifecycle.
 
 ## What works now
 
@@ -41,8 +41,8 @@ Setup / Instrument context
   -> arm
   -> start physical-camera exposure
   -> finish or early stop/readout
-  -> local FITS + PNG quicklook
-  -> ExposureRecord / available DataProductRef
+  -> optional FITS + PNG quicklook when save_requested=true
+  -> ExposureRecord / available or not_requested DataProductRef
   -> read-only observatory context visibility
   -> v7 Observe command summary
   -> raw JSON diagnostics when needed
@@ -60,8 +60,8 @@ ObservationPlan -> side-effect-free SequencePreview -> load
 Exposure completion is explicitly operator-driven in this baseline. `Start`
 enters the exposing state but does not schedule `Finish` when `exp_time_s`
 elapses; the operator uses Finish or Stop & Readout. Timer ownership, automatic
-readout, timeout handling, and restart recovery must be defined together before
-automatic completion is enabled.
+readout, and timeout handling remain deferred; restart recovery is conservative
+and never assumes that an interrupted exposure completed.
 
 Implemented capabilities include:
 
@@ -75,16 +75,19 @@ Implemented capabilities include:
 - Detector configuration visibility and guarded mutation.
 - Preset catalog, preview, guarded apply, risk/confirmation metadata, and observation metadata linkage.
 - Observation single-exposure lifecycle: arm, start, finish, stop/readout, abort/discard.
-- `ObservationPlan`, `SequencePreview`, in-memory sequence execution state, and auditable load/start/finish-step/pause/resume/abort commands.
+- `ObservationPlan`, `SequencePreview`, versioned JSON sequence state, atomic saves, saved-plan frame-index reservation, and auditable load/start/finish-step/pause/resume/abort commands.
+- Conservative restart reconciliation with `recovery_required`, local FITS/PNG existence and FITS checksum checks, Retry Current Step, Abort, and Mark Failed.
 - Backend ownership guard preventing direct single-exposure commands from competing with an active sequence.
 - Side-effect-free observation preview contract.
 - Backend arm gate based on current readiness preview.
 - Observation command feedback contract for success, blocked, and failed command results.
 - Stateful science-camera lifecycle: start, finish/readout, early stop/readout,
   and abort.
+- Explicit per-acquisition `save_requested` policy, default off; unsaved readouts remain available as the latest in-memory science image and do not consume file indices.
 - One physical science camera bridged to the existing logical B/G/R channels.
-- Independent simulated slit-camera live preview.
-- Actual local FITS files and PNG quicklooks in simulation mode.
+- Three persistent B/G/R science display panes and stable logical-channel image endpoints; the beta bridge marks their currently shared science-camera source instead of hiding the final instrument topology.
+- Independent simulated slit/guide-camera live preview with explicit start/stop state; it never writes data products and remains available during science acquisition.
+- Actual local FITS files and PNG quicklooks in simulation mode when persistence is requested.
 - ExposureRecord provenance for the physical camera, logical channels, shared
   capture ID, checksum, and file URI.
 - Replaceable camera profiles under `config/`.
@@ -98,7 +101,7 @@ Implemented capabilities include:
 
 The repository intentionally does not yet implement:
 
-- unattended/background sequence scheduling, timed auto-advance, or restart recovery;
+- unattended/background sequence scheduling, timed auto-advance, automatic retry, or automatic mid-exposure resume;
 - timer-driven automatic completion/readout for a started exposure;
 - durable DataProduct database or archive pipeline;
 - OCS adapter;
@@ -174,6 +177,19 @@ var/data/YYYYMMDD/<obs-id>/*.fits
 var/data/YYYYMMDD/<obs-id>/*-quicklook.png
 ```
 
+Operator setup and sequence recovery state use local, ignored JSON files:
+
+```text
+.justls/setup_context.json
+.justls/sequence_execution.json
+```
+
+Override them with `JUSTLS_SETUP_CONTEXT_PATH` and
+`JUSTLS_SEQUENCE_STATE_PATH`. The sequence file is an operational recovery
+artifact, not a portable plan template; do not edit it while ICS Beta is
+running. This Lite store assumes one ICS Beta server process; do not point
+multiple Uvicorn workers or independent processes at the same sequence file.
+
 ## Runtime defaults
 
 Default v7 behavior:
@@ -213,10 +229,10 @@ GET  /api/v1/status/full
 GET  /api/v1/capabilities
 GET  /api/v1/observatory/context
 GET  /api/v1/cameras/status
+POST /api/v1/cameras/slit/preview/start
+POST /api/v1/cameras/slit/preview/stop
 GET  /camera/slit/latest.jpg
-GET  /camera/b/latest.jpg
-GET  /camera/g/latest.jpg
-GET  /camera/r/latest.jpg
+GET  /camera/{b|g|r}/latest.jpg  -> stable logical channels; same shared science-camera readout during beta
 
 GET  /api/v1/setup/context
 PUT  /api/v1/setup/context
@@ -249,6 +265,8 @@ POST /api/v1/observation/sequence/stop_readout_step
 POST /api/v1/observation/sequence/pause
 POST /api/v1/observation/sequence/resume
 POST /api/v1/observation/sequence/abort
+POST /api/v1/observation/sequence/retry_current_step
+POST /api/v1/observation/sequence/mark_failed
 
 GET  /api/v1/presets
 POST /api/v1/presets/preview
@@ -266,7 +284,17 @@ latest_exposure_record -> exposure lifecycle + data-product reference contract
 
 Preview is advisory. Arm is an independent command. Every Arm call reruns the backend readiness gate.
 
-Sequence preview is also advisory and side-effect-free. Loading rechecks every step. Each sequence start reruns the single-exposure backend arm gate. The current executor is in-memory and operator-stepped; it deliberately has no background timer or restart recovery.
+Sequence preview is also advisory and side-effect-free. Loading rechecks every
+step and saves sequence state under
+`.justls/sequence_execution.json` by default. Each sequence start reruns the
+single-exposure backend arm gate. The executor remains operator-stepped and has
+no background timer. A restart during an active step enters `recovery_required`;
+retry is blocked whenever a possible FITS already exists.
+
+`save_requested` defaults to false for both Single and Sequence. A saved Single
+reserves one file index at Arm; a saved Sequence reserves its full range at
+Load. Unsaved acquisitions do not consume file indices. The save choice is
+frozen while an exposure or non-terminal sequence owns the science detector.
 
 ## Documentation map
 

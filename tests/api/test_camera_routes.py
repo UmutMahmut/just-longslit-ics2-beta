@@ -30,8 +30,21 @@ def test_camera_status_describes_replaceable_devices_and_shared_bridge() -> None
     }
 
 
-def test_bgr_routes_share_one_physical_camera_preview() -> None:
+def test_logical_science_channels_share_the_beta_source_after_acquisition() -> None:
     client = TestClient(app)
+    assert all(
+        client.get(f"/camera/{channel}/latest.jpg").status_code == 404
+        for channel in "bgr"
+    )
+    assert client.get("/camera/science/latest.png").status_code == 404
+
+    assert client.post(
+        "/api/v1/observation/arm",
+        json={"exp_time_s": 0.1, "frame_type": "test", "save_requested": False},
+    ).status_code == 200
+    assert client.post("/api/v1/observation/start").status_code == 200
+    assert client.post("/api/v1/observation/finish").status_code == 200
+
     responses = [client.get(f"/camera/{channel}/latest.jpg") for channel in "bgr"]
 
     assert all(response.status_code == 200 for response in responses)
@@ -47,6 +60,7 @@ def test_bgr_routes_share_one_physical_camera_preview() -> None:
         response.headers["x-ics-shared-capture"] == "true"
         for response in responses
     )
+    assert all("x-ics-legacy-alias" not in response.headers for response in responses)
 
 
 def test_slit_camera_route_returns_independent_live_jpeg_frames() -> None:
@@ -63,3 +77,28 @@ def test_slit_camera_route_returns_independent_live_jpeg_frames() -> None:
     assert int(second.headers["x-ics-frame-sequence"]) == (
         int(first.headers["x-ics-frame-sequence"]) + 1
     )
+
+
+def test_slit_preview_can_stop_and_resume_without_affecting_science_exposure() -> None:
+    client = TestClient(app)
+
+    stopped = client.post("/api/v1/cameras/slit/preview/stop")
+    assert stopped.status_code == 200
+    assert stopped.json()["state"] == "stopped"
+    sequence = stopped.json()["sequence"]
+    assert client.get("/camera/slit/latest.jpg").status_code == 409
+    assert client.get("/api/v1/cameras/status").json()["slit_camera"]["sequence"] == sequence
+
+    resumed = client.post("/api/v1/cameras/slit/preview/start")
+    assert resumed.status_code == 200
+    assert resumed.json()["state"] == "previewing"
+
+    assert client.post(
+        "/api/v1/observation/arm",
+        json={"exp_time_s": 5, "frame_type": "science"},
+    ).status_code == 200
+    assert client.post("/api/v1/observation/start").status_code == 200
+    first = client.get("/camera/slit/latest.jpg")
+    second = client.get("/camera/slit/latest.jpg")
+    assert first.status_code == second.status_code == 200
+    assert int(second.headers["x-ics-frame-sequence"]) == int(first.headers["x-ics-frame-sequence"]) + 1

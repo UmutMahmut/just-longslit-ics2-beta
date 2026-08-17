@@ -243,6 +243,22 @@ def abort_observation_sequence(
     return _sequence_command_route("abort", request, sequence_service)
 
 
+@router.post("/observation/sequence/retry_current_step", response_model=SequenceCommandFeedbackResponse, responses={400: {"model": SequenceCommandFeedbackResponse}})
+def retry_observation_sequence_step(
+    request: Request,
+    sequence_service: ObservationSequenceServiceDep,
+) -> SequenceCommandFeedbackResponse | JSONResponse:
+    return _sequence_command_route("retry_current_step", request, sequence_service)
+
+
+@router.post("/observation/sequence/mark_failed", response_model=SequenceCommandFeedbackResponse, responses={400: {"model": SequenceCommandFeedbackResponse}})
+def mark_observation_sequence_failed(
+    request: Request,
+    sequence_service: ObservationSequenceServiceDep,
+) -> SequenceCommandFeedbackResponse | JSONResponse:
+    return _sequence_command_route("mark_failed", request, sequence_service)
+
+
 @router.post(
     "/observation/arm",
     response_model=ObservationCommandFeedbackResponse,
@@ -264,6 +280,7 @@ def arm_observation(
             exp_time_s=req.exp_time_s,
             frame_type=req.frame_type,
             operator_note=req.operator_note,
+            save_requested=req.save_requested,
         )
     except ICSException as exc:
         return _observation_exception_response(
