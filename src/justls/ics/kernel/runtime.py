@@ -15,6 +15,7 @@ from justls.ics.domain.detector.config import (
 )
 from justls.ics.domain.detector.subsystem import DetectorSubsystem
 from justls.ics.domain.lamps.subsystem import CalibrationSubsystem
+from justls.ics.domain.observation.sequence import SequenceExecutionSnapshot
 from justls.ics.domain.slit.subsystem import SlitSubsystem
 from justls.ics.drivers.sim.camera_driver import SimPreviewCameraDriver
 from justls.ics.drivers.sim.detector_driver import SimDetectorDriver
@@ -64,6 +65,7 @@ class Runtime:
     data_root: str | None = None
     detector_config: DetectorConfig = field(default_factory=build_default_detector_config)
     job_tracker: JobTracker = field(default_factory=JobTracker)
+    sequence_execution: SequenceExecutionSnapshot | None = None
     started_at: datetime = field(default_factory=utc_now)
 
     def get_snapshot(self) -> SystemStateSnapshot:

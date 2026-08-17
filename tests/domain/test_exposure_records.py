@@ -74,3 +74,36 @@ def test_discarded_exposure_record_has_no_data_product() -> None:
     assert record.quicklook is None
     assert "discarded" in record.model_dump(mode="json")["quality_flags"]
 
+
+def test_available_local_fits_does_not_report_missing_writer() -> None:
+    meta = ObservationMeta.create(
+        frame_type="science",
+        exp_time_s=5,
+        data_preview={"file_stem": "just_20260812_0001"},
+    )
+    meta.mark_exposing()
+    meta.mark_completed()
+    frame_result = FrameResult(
+        frame_token="frame-token",
+        file_uri="file:///tmp/frame.fits",
+        quicklook_uri="file:///tmp/frame.png",
+        kept=True,
+        early_stop=False,
+        discarded=False,
+        checksum="abc123",
+        started_at_utc=meta.started_at_utc,
+        finished_at_utc=meta.finished_at_utc,
+        result="completed",
+        exists=True,
+        simulated=True,
+    )
+
+    record = ExposureRecord.from_frame_result(
+        observation_meta=meta,
+        frame_result=frame_result,
+    )
+
+    assert record.data_product_state == DataProductState.AVAILABLE
+    assert record.fits_header.setup_file_stem == "just_20260812_0001"
+    assert "simulated" in record.model_dump(mode="json")["quality_flags"]
+    assert "no_fits_writer" not in record.model_dump(mode="json")["quality_flags"]

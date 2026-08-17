@@ -9,13 +9,13 @@ spectrograph.
 
 ## Current baseline
 
-Current code baseline: campus camera integration vertical slice.
+Current code baseline: simulator-backed operator workflow and observation-sequence contract.
 
 Validation baseline:
 
 ```text
 pytest -q
-249 passed
+265 passed
 ```
 
 Current default UI behavior:
@@ -28,11 +28,11 @@ Current default UI behavior:
 /ui/v6     -> v6 review shell
 ```
 
-`/ui` and `/ui/v7` now load v7 runtime status plus Observe runtime by default. Setup, Instrument, and Presets runtime modules remain off unless explicitly enabled.
+`/ui` and `/ui/v7` load the complete operator-safe v7 runtime by default: status, Setup, Instrument, Presets, Observe, sequence control, camera preview, and Observe guards. The runtime master gate still provides a fully static fallback shell.
 
 ## What works now
 
-The current repository supports a simulator-backed single-exposure control loop with auditable command feedback:
+The current repository supports simulator-backed single-exposure and operator-stepped multi-exposure loops with auditable command feedback:
 
 ```text
 Setup / Instrument context
@@ -48,6 +48,21 @@ Setup / Instrument context
   -> raw JSON diagnostics when needed
 ```
 
+Multi-exposure plans reuse that same loop for every step:
+
+```text
+ObservationPlan -> side-effect-free SequencePreview -> load
+  -> start current step -> finish or early stop/readout
+  -> ExposureRecord -> next step
+  -> optional pause/resume or abort
+```
+
+Exposure completion is explicitly operator-driven in this baseline. `Start`
+enters the exposing state but does not schedule `Finish` when `exp_time_s`
+elapses; the operator uses Finish or Stop & Readout. Timer ownership, automatic
+readout, timeout handling, and restart recovery must be defined together before
+automatic completion is enabled.
+
 Implemented capabilities include:
 
 - FastAPI backend under `/api/v1/*`.
@@ -60,6 +75,8 @@ Implemented capabilities include:
 - Detector configuration visibility and guarded mutation.
 - Preset catalog, preview, guarded apply, risk/confirmation metadata, and observation metadata linkage.
 - Observation single-exposure lifecycle: arm, start, finish, stop/readout, abort/discard.
+- `ObservationPlan`, `SequencePreview`, in-memory sequence execution state, and auditable load/start/finish-step/pause/resume/abort commands.
+- Backend ownership guard preventing direct single-exposure commands from competing with an active sequence.
 - Side-effect-free observation preview contract.
 - Backend arm gate based on current readiness preview.
 - Observation command feedback contract for success, blocked, and failed command results.
@@ -74,14 +91,15 @@ Implemented capabilities include:
 - Read-only `/api/v1/observatory/context` for OCS/TCS/telescope/dome/weather/guider visibility with unavailable/stale-ready semantics reserved.
 - `/api/v1/status/full` includes observatory context and latest exposure-record visibility.
 - Simulator adapter contract tests for detector, slit, and calibration behavior.
-- v7 Observe runtime consumption of command feedback.
+- v7 operator workflow runtime enabled across Setup, Instrument, Presets, Observe, sequence progress, exposure-record summaries, and Diagnostics.
 - v7 route/runtime tests and API contract tests.
 
 ## What is not implemented yet
 
 The repository intentionally does not yet implement:
 
-- multi-exposure sequence runner;
+- unattended/background sequence scheduling, timed auto-advance, or restart recovery;
+- timer-driven automatic completion/readout for a started exposure;
 - durable DataProduct database or archive pipeline;
 - OCS adapter;
 - TCS telescope control;
@@ -163,16 +181,11 @@ Default v7 behavior:
 ```text
 JUSTLS_UI_V7_RUNTIME_ENABLED         default: on
 JUSTLS_UI_V7_RUNTIME_STATUS_ENABLED  default: on
+JUSTLS_UI_V7_SETUP_RUNTIME_ENABLED   default: on
+JUSTLS_UI_V7_INSTRUMENT_RUNTIME_ENABLED default: on
+JUSTLS_UI_V7_PRESET_RUNTIME_ENABLED default: on
 JUSTLS_UI_V7_OBSERVE_RUNTIME_ENABLED default: on
 JUSTLS_UI_V7_OBSERVE_GUARD_ENABLED   default: on
-```
-
-Still default off:
-
-```text
-JUSTLS_UI_V7_SETUP_RUNTIME_ENABLED
-JUSTLS_UI_V7_INSTRUMENT_RUNTIME_ENABLED
-JUSTLS_UI_V7_PRESET_RUNTIME_ENABLED
 ```
 
 To force the v7 static shell:
@@ -181,12 +194,12 @@ To force the v7 static shell:
 $env:JUSTLS_UI_V7_RUNTIME_ENABLED="0"
 ```
 
-To explicitly enable additional modules:
+Individual modules can still be disabled for troubleshooting:
 
 ```powershell
-$env:JUSTLS_UI_V7_INSTRUMENT_RUNTIME_ENABLED="1"
-$env:JUSTLS_UI_V7_PRESET_RUNTIME_ENABLED="1"
-$env:JUSTLS_UI_V7_SETUP_RUNTIME_ENABLED="1"
+$env:JUSTLS_UI_V7_INSTRUMENT_RUNTIME_ENABLED="0"
+$env:JUSTLS_UI_V7_PRESET_RUNTIME_ENABLED="0"
+$env:JUSTLS_UI_V7_SETUP_RUNTIME_ENABLED="0"
 ```
 
 ## API overview
@@ -227,6 +240,16 @@ POST /api/v1/observation/finish
 POST /api/v1/observation/stop_readout
 POST /api/v1/observation/abort_discard
 
+POST /api/v1/observation/sequence/preview
+GET  /api/v1/observation/sequence/status
+POST /api/v1/observation/sequence/load
+POST /api/v1/observation/sequence/start
+POST /api/v1/observation/sequence/finish_step
+POST /api/v1/observation/sequence/stop_readout_step
+POST /api/v1/observation/sequence/pause
+POST /api/v1/observation/sequence/resume
+POST /api/v1/observation/sequence/abort
+
 GET  /api/v1/presets
 POST /api/v1/presets/preview
 POST /api/v1/presets/apply
@@ -242,6 +265,8 @@ latest_exposure_record -> exposure lifecycle + data-product reference contract
 ```
 
 Preview is advisory. Arm is an independent command. Every Arm call reruns the backend readiness gate.
+
+Sequence preview is also advisory and side-effect-free. Loading rechecks every step. Each sequence start reruns the single-exposure backend arm gate. The current executor is in-memory and operator-stepped; it deliberately has no background timer or restart recovery.
 
 ## Documentation map
 

@@ -132,7 +132,13 @@ def test_v7_static_observe_page_has_single_runtime_enhanceable_skeleton():
     assert 'data-action="obs-start"' in response.text
     assert 'data-action="obs-stop-readout"' in response.text
     assert 'data-action="obs-abort-discard"' in response.text
-    assert "Observe · Single Exposure Control · Single Exposure Only" in response.text
+    assert "Observe · Exposure and Sequence Control" in response.text
+    assert 'data-role="v7-observe-sequence-panel"' in response.text
+    assert 'data-bind="v7.observe.record.fits"' in response.text
+    assert 'data-role="sequence-abort-confirm"' in response.text
+    assert 'data-bind="v7.sequence.latest_job"' in response.text
+    assert 'data-bind="v7.sequence.last_error"' in response.text
+    assert "does not schedule timer-based completion" in response.text
     assert "Buttons are static until Phase 2.8-F binding" not in response.text
 
 def test_v7_default_shell_exposes_unified_command_feedback_static_bindings():
@@ -151,3 +157,12 @@ def test_v7_default_shell_exposes_unified_command_feedback_static_bindings():
         assert f'data-bind="v7.{prefix}.latest_job"' in response.text
         assert f'data-bind="v7.{prefix}.last_error"' in response.text
         assert f'data-bind="v7.{prefix}.result_summary"' in response.text
+
+    assert 'data-bind="v7.setup.request_id"' in response.text
+    assert 'data-bind="v7.setup.result_summary"' in response.text
+    assert 'data-bind="v7.sequence.request_id"' in response.text
+    assert 'data-bind="v7.sequence.latest_job"' in response.text
+    assert 'data-bind="v7.sequence.last_error"' in response.text
+    assert 'data-bind="v7.sequence.summary"' in response.text
+    assert 'data-bind="v7.diagnostics.data_provenance"' in response.text
+    assert 'data-bind="v7.diagnostics.latest_fits"' in response.text

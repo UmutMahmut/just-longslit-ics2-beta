@@ -213,16 +213,17 @@ class FitsHeaderSummary(BaseModel):
     ) -> "FitsHeaderSummary":
         detector_config = observation_meta.detector_config or {}
         setup_context = observation_meta.setup_context or {}
+        data_preview = observation_meta.data_preview or {}
         detector_profile = (
             detector_config.get("profile_name")
             if isinstance(detector_config, dict)
             else None
         )
-        setup_file_stem = (
-            setup_context.get("file_stem")
-            if isinstance(setup_context, dict)
-            else None
-        )
+        setup_file_stem = None
+        if isinstance(data_preview, dict):
+            setup_file_stem = data_preview.get("file_stem")
+        if setup_file_stem is None and isinstance(setup_context, dict):
+            setup_file_stem = setup_context.get("file_stem")
         simulated = frame_result.simulated if frame_result is not None else True
         cards: dict[str, Any] = {
             "OBS_ID": observation_meta.obs_id,
@@ -318,8 +319,6 @@ class ExposureRecord(BaseModel):
             flags.append(QualityFlag.EARLY_STOP)
         if discarded:
             flags.append(QualityFlag.DISCARDED)
-        else:
-            flags.append(QualityFlag.NO_FITS_WRITER)
 
         if discarded:
             data_product = DataProductRef.not_created(

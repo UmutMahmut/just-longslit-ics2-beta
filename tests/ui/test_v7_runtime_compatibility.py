@@ -187,6 +187,46 @@ def test_v7_observe_runtime_and_guard_assets_target_existing_observe_skeleton():
     assert "obs-abort-discard" in guard_js
 
 
+def test_v7_sequence_runtime_targets_audited_sequence_api_and_panel():
+    client = TestClient(app)
+
+    response = client.get("/ui-assets/v7/sequence_runtime.js")
+
+    assert response.status_code == 200
+    js = response.text
+    assert "__JUSTLS_V7_SEQUENCE_RUNTIME__" in js
+    assert 'data-role="v7-observe-sequence-panel"' in js
+    assert "/api/v1/observation/sequence/preview" in js
+    assert "/api/v1/observation/sequence/load" in js
+    assert "/api/v1/observation/sequence/start" in js
+    assert "/api/v1/observation/sequence/finish_step" in js
+    assert "/api/v1/observation/sequence/pause" in js
+    assert "/api/v1/observation/sequence/resume" in js
+    assert "/api/v1/observation/sequence/abort" in js
+    assert "x-request-id" in js
+    assert "step_results" in js
+    assert "previewPlan" in js
+    assert "readPlanForLoad" in js
+    assert 'data-role="sequence-abort-confirm"' in js
+    assert "justls:v7-sequence-state" in js
+    assert "latest_job" in js
+
+
+def test_v7_observe_runtime_refreshes_after_sequence_commands_and_guard_owns_direct_controls():
+    client = TestClient(app)
+
+    observe = client.get("/ui-assets/v7/observe_runtime.js")
+    guard = client.get("/ui-assets/v7/observe_guard.js")
+
+    assert observe.status_code == 200
+    assert guard.status_code == 200
+    assert 'button[data-action^="obs-"]' in observe.text
+    assert "const firstEnable" in observe.text
+    assert 'window.addEventListener("justls:v7-local-refresh", refreshStatus)' in observe.text
+    assert 'window.addEventListener("justls:v7-sequence-state", handleSequenceState)' in guard.text
+    assert "runtime.sequenceActive" in guard.text
+
+
 def test_v7_served_observe_shell_exposes_h3_finish_and_structured_result_fields():
     client = TestClient(app)
 

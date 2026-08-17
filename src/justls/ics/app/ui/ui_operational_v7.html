@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="light dark" />
   <title>JUST 长缝光谱仪 ICS · v7.1 Operator Console</title>
   <!--
-    Phase 2.8-H / H7 v7.1 static operator console shell.
+    Phase 2.9-F / Phase 3.0-A v7.1 operator workflow shell.
 
     Intent:
       - rebuild v7 around the current information architecture decision;
@@ -226,9 +226,9 @@
         <div class="subtitle">JUST Telescope · Long-Slit Spectrograph · ICS 2.0</div>
         <h1>v7.1 Operator Console Prototype</h1>
         <div class="badge-row">
-          <span class="badge demo">Phase 2.8-H static shell</span>
-          <span class="badge live">Instrument / Configure added</span>
-          <span class="badge future">Runtime remains opt-in</span>
+          <span class="badge demo">Phase 2.9-F operator workflow</span>
+          <span class="badge live">Sequence baseline active</span>
+          <span class="badge live">Runtime enabled by default</span>
         </div>
       </div>
 
@@ -308,12 +308,18 @@
 
                   <div class="badge-row" style="margin-top: 10px;" aria-label="setup persistence status">
                     <span class="badge live" data-bind="v7.setup.persistence_status">Persisted backend context</span>
-                    <span class="badge future" data-bind="v7.setup.save_status">UI save binding pending</span>
+                    <span class="badge future" data-bind="v7.setup.save_status">Waiting for setup runtime</span>
                   </div>
                   <div class="badge-row" style="margin-top: 10px;" aria-label="setup context actions">
                     <button class="btn primary" type="button" data-action="setup-save-context" disabled>Save Setup</button>
                     <button class="btn" type="button" data-action="setup-reload-context" disabled>Reload from Backend</button>
                   </div>
+                  <dl class="kv compact-kv" style="margin-top: 10px;" data-role="setup-command-summary">
+                    <dt>Last Command</dt><dd><code data-bind="v7.setup.last_command">none</code></dd>
+                    <dt>Request ID</dt><dd><code data-bind="v7.setup.request_id">not available</code></dd>
+                    <dt>Last Error</dt><dd><code data-bind="v7.setup.last_error">none</code></dd>
+                    <dt>Summary</dt><dd><code data-bind="v7.setup.result_summary">runtime initializing</code></dd>
+                  </dl>
                 </div>
               </section>
 
@@ -333,8 +339,8 @@
 
                   <div class="badge-row" style="margin-top: 10px;">
                     <span class="badge live">Session context API ready</span>
-                    <span class="badge future">Runtime status optional</span>
-                    <span class="badge future">UI save binding pending</span>
+                    <span class="badge live">Runtime status default-on</span>
+                    <span class="badge live">Setup save/reload default-on</span>
                   </div>
                 </div>
               </section>
@@ -507,7 +513,7 @@
                       <dt>Latest Job</dt><dd><code data-bind="v7.instrument.latest_job">not available</code></dd>
                       <dt>Last Error</dt><dd><code data-bind="v7.instrument.last_error">none</code></dd>
                       <dt>Runtime State</dt><dd><code data-bind="v7.instrument.runtime_state">static fallback</code></dd>
-                      <dt>Summary</dt><dd><code data-bind="v7.instrument.result_summary">runtime not enabled</code></dd>
+                      <dt>Summary</dt><dd><code data-bind="v7.instrument.result_summary">no command yet</code></dd>
                     </dl>
                   </div>
                 </section>
@@ -547,7 +553,7 @@
             </section>
 
             <section class="panel" id="v7-observe-controls" data-role="v7-observe-panel" data-phase="static-fallback">
-              <h2>Observe · Single Exposure Control · Single Exposure Only</h2>
+              <h2>Observe · Exposure and Sequence Control</h2>
               <div class="panel-body grid">
                 <div class="field-grid">
                   <label>Exposure Time (s)<input type="number" min="0.001" step="0.001" value="30" data-role="obs-exp-time" /></label>
@@ -562,8 +568,8 @@
                   <dt>Request ID</dt><dd><code data-bind="v7.observe.request_id">not available</code></dd>
                   <dt>Latest Job</dt><dd><code data-bind="v7.observe.latest_job">not available</code></dd>
                   <dt>Last Error</dt><dd><code data-bind="v7.observe.last_error">none</code></dd>
-                  <dt>Result Summary</dt><dd><code data-bind="v7.observe.result_summary">runtime not enabled</code></dd>
-                  <dt>Runtime State</dt><dd><code data-bind="v7.observe.runtime_state">static fallback</code></dd>
+                  <dt>Result Summary</dt><dd><code data-bind="v7.observe.result_summary">no command yet</code></dd>
+                  <dt>Runtime State</dt><dd><code data-bind="v7.observe.runtime_state">initializing</code></dd>
                 </dl>
                 <div class="badge-row">
                   <button class="btn" type="button" data-action="obs-preview" disabled>Preview</button>
@@ -574,6 +580,45 @@
                   <button class="btn danger" type="button" data-action="obs-abort-discard" disabled>Abort & Discard</button>
                 </div>
                 <label><input type="checkbox" data-role="obs-abort-confirm" /> Enable abort/discard command</label>
+                <p style="margin: 0; color: var(--muted); font-size: 12px;">Current baseline: Start begins an exposure but does not schedule timer-based completion. Use Finish or Stop &amp; Readout; automatic completion remains deferred until execution and recovery semantics are defined.</p>
+                <section class="subpanel" data-role="v7-exposure-record-panel">
+                  <h3>Latest Exposure Record / Data Products</h3>
+                  <dl class="kv">
+                    <dt>Record</dt><dd><code data-bind="v7.observe.record.id">not available</code></dd>
+                    <dt>Provenance</dt><dd><code data-bind="v7.observe.record.provenance">not available</code></dd>
+                    <dt>FITS</dt><dd><code data-bind="v7.observe.record.fits">not created</code></dd>
+                    <dt>Quicklook</dt><dd><code data-bind="v7.observe.record.quicklook">not created</code></dd>
+                  </dl>
+                </section>
+                <section class="subpanel" data-role="v7-observe-sequence-panel">
+                  <h3>Observation Sequence / Multi-Exposure</h3>
+                  <p style="margin: 0; color: var(--muted); font-size: 12px;">Enter one exposure per line: <code>frame_type,seconds,label</code>. Execution is audited step-by-step through the single-exposure safety gate.</p>
+                  <label style="margin-top: 8px;">Plan Steps<textarea data-role="sequence-plan-steps" rows="4">science,5,science-1
+science,5,science-2</textarea></label>
+                  <div class="badge-row" style="margin-top: 8px;">
+                    <button class="btn" type="button" data-action="sequence-preview" disabled>Preview Plan</button>
+                    <button class="btn primary" type="button" data-action="sequence-load" disabled>Load Plan</button>
+                    <button class="btn primary" type="button" data-action="sequence-start" disabled>Start Step</button>
+                    <button class="btn" type="button" data-action="sequence-finish-step" disabled>Finish Step</button>
+                    <button class="btn" type="button" data-action="sequence-stop-readout-step" disabled>Stop & Readout Step</button>
+                    <button class="btn" type="button" data-action="sequence-pause" disabled>Pause</button>
+                    <button class="btn" type="button" data-action="sequence-resume" disabled>Resume</button>
+                    <button class="btn danger" type="button" data-action="sequence-abort" disabled>Abort Sequence</button>
+                  </div>
+                  <label><input type="checkbox" data-role="sequence-abort-confirm" /> Enable sequence abort/discard command</label>
+                  <dl class="kv" style="margin-top: 8px;">
+                    <dt>Plan</dt><dd><code data-bind="v7.sequence.plan_id">not loaded</code></dd>
+                    <dt>State</dt><dd><code data-bind="v7.sequence.state">idle</code></dd>
+                    <dt>Progress</dt><dd><code data-bind="v7.sequence.progress">0 / 0</code></dd>
+                    <dt>Current Step</dt><dd><code data-bind="v7.sequence.current">not available</code></dd>
+                    <dt>Last Command</dt><dd><code data-bind="v7.sequence.last_command">none</code></dd>
+                    <dt>Request ID</dt><dd><code data-bind="v7.sequence.request_id">not available</code></dd>
+                    <dt>Latest Job</dt><dd><code data-bind="v7.sequence.latest_job">not available</code></dd>
+                    <dt>Last Error</dt><dd><code data-bind="v7.sequence.last_error">none</code></dd>
+                    <dt>Summary</dt><dd><code data-bind="v7.sequence.summary">No plan loaded.</code></dd>
+                  </dl>
+                  <details class="dev-note"><summary>Raw Sequence JSON</summary><pre data-bind="v7.sequence.raw">No sequence request sent.</pre></details>
+                </section>
                 <section class="subpanel" data-role="v7-observe-preview-panel">
                   <h3>Observation Preview - Readiness / Validation</h3>
                   <dl class="kv">
@@ -595,9 +640,9 @@
                 </section>
                 <details class="dev-note" data-role="v7-observe-command-raw">
                   <summary>Raw Command JSON</summary>
-                  <pre data-bind="v7.observe.result">No observation command sent. Runtime observe binding is opt-in.</pre>
+                  <pre data-bind="v7.observe.result">No observation command sent. Timer-driven completion is not enabled in this baseline.</pre>
                 </details>
-                <span class="badge demo">Static fallback · observe runtime not enabled</span>
+                <span class="badge live" data-bind="v7.observe.runtime_notice">Operator runtime initializing</span>
               </div>
             </section>
           </div>
@@ -607,7 +652,7 @@
           <section class="panel" id="v7-presets-runtime" data-role="v7-presets-panel" data-phase="static-fallback">
             <h2>Presets · Catalog / Preview / Guarded Apply</h2>
             <div class="panel-body grid">
-              <div class="badge demo" data-bind="v7.presets.status">Static fallback · preset runtime not enabled</div>
+              <div class="badge demo" data-bind="v7.presets.status">Waiting for preset runtime</div>
               <dl class="kv">
                 <dt>Catalog Loaded</dt><dd><code data-bind="v7.presets.catalog_loaded_at">not loaded</code></dd>
                 <dt>Runtime State</dt><dd><code data-bind="v7.presets.runtime_state">static fallback</code></dd>
@@ -630,12 +675,12 @@
                 <dt>Request ID</dt><dd><code data-bind="v7.presets.request_id">not available</code></dd>
                 <dt>Latest Job</dt><dd><code data-bind="v7.presets.latest_job">not available</code></dd>
                 <dt>Last Error</dt><dd><code data-bind="v7.presets.last_error">none</code></dd>
-                <dt>Result Summary</dt><dd><code data-bind="v7.presets.result_summary">runtime not enabled</code></dd>
+                <dt>Result Summary</dt><dd><code data-bind="v7.presets.result_summary">no command yet</code></dd>
               </dl>
             </div>
           </section>
               <h3>Preview Result</h3>
-              <pre data-bind="v7.presets.preview">Select Preview for a preset. Runtime preset binding is opt-in.</pre>
+              <pre data-bind="v7.presets.preview">Select Preview for a preset.</pre>
               <h3>Guarded Apply</h3>
               <div data-role="v7-preset-confirmation" hidden>
                 <label><input type="checkbox" data-role="confirm-risk-checkbox" /> I understand this preset requires confirmation.</label>
@@ -672,6 +717,10 @@
                   <dt>Last Command</dt><dd><code data-bind="v7.last_command">not available</code></dd>
                   <dt>Last Error</dt><dd><code data-bind="v7.last_error">none</code></dd>
                   <dt>Image Feed</dt><dd><span class="badge future">quicklook / data watcher deferred</span></dd>
+                  <dt>Data Provenance</dt><dd><code data-bind="v7.diagnostics.data_provenance">no exposure record</code></dd>
+                  <dt>Latest FITS</dt><dd><code data-bind="v7.diagnostics.latest_fits">not created</code></dd>
+                  <dt>Latest Quicklook</dt><dd><code data-bind="v7.diagnostics.latest_quicklook">not created</code></dd>
+                  <dt>Sequence</dt><dd><code data-bind="v7.diagnostics.sequence">not loaded</code></dd>
                 </dl>
               </div>
             </section>
@@ -681,16 +730,18 @@
             <div class="panel-body">
               <dl class="kv">
                 <dt>Feedback Vocabulary</dt><dd><code>last_command / request_id / latest_job / last_error / result_summary / raw_json</code></dd>
-                <dt>Instrument</dt><dd><code data-bind="v7.instrument.request_id">not available</code> · <code data-bind="v7.instrument.result_summary">runtime not enabled</code></dd>
-                <dt>Observe</dt><dd><code data-bind="v7.observe.request_id">not available</code> · <code data-bind="v7.observe.result_summary">runtime not enabled</code></dd>
-                <dt>Presets</dt><dd><code data-bind="v7.presets.request_id">not available</code> · <code data-bind="v7.presets.result_summary">runtime not enabled</code></dd>
+                <dt>Instrument</dt><dd><code data-bind="v7.instrument.request_id">not available</code> · <code data-bind="v7.instrument.result_summary">no command yet</code></dd>
+                <dt>Observe</dt><dd><code data-bind="v7.observe.request_id">not available</code> · <code data-bind="v7.observe.result_summary">no command yet</code></dd>
+                <dt>Presets</dt><dd><code data-bind="v7.presets.request_id">not available</code> · <code data-bind="v7.presets.result_summary">no command yet</code></dd>
+                <dt>Setup</dt><dd><code data-bind="v7.setup.request_id">not available</code> · <code data-bind="v7.setup.result_summary">no command yet</code></dd>
+                <dt>Sequence</dt><dd><code data-bind="v7.sequence.request_id">not available</code> · <code data-bind="v7.sequence.summary">not loaded</code></dd>
                 <dt>Raw JSON Policy</dt><dd>Routine pages show summaries first; raw payloads stay in page details and Diagnostics.</dd>
               </dl>
             </div>
           </section>
           <section class="panel" id="v7-raw-status-preview" data-role="v7-raw-status-preview" style="margin-top: 12px;">
             <h2>Raw Status Preview · Diagnostics Only</h2>
-            <div class="panel-body"><pre data-bind="v7.raw_status_preview">Runtime status adapter is opt-in.</pre></div>
+            <div class="panel-body"><pre data-bind="v7.raw_status_preview">No live status received yet.</pre></div>
           </section>
         </section>
 

@@ -95,6 +95,6 @@ def test_v7_static_shell_keeps_unwired_hardware_honest():
 
     assert response.status_code == 200
     html = response.text
-    assert "Runtime remains opt-in" in html
+    assert "Runtime enabled by default" in html
     assert "read-only summary" in html
-    assert "not connected" in html or "runtime not enabled" in html
+    assert "not connected" in html or "no command yet" in html

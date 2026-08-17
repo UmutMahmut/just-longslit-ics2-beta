@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from justls.ics.domain.detector.config import DetectorConfig
 from justls.ics.domain.observatory.context import ObservatoryContext
+from justls.ics.domain.observation.sequence import SequenceExecutionSnapshot
 
 
 class PresetListItemResponse(BaseModel):
@@ -316,6 +317,7 @@ class StatusFullResponse(BaseModel):
     capabilities: CapabilitiesResponse
     calibration: CalibrationStatusResponse | None = None
     observation: ObservationStatusResponse | None = None
+    observation_sequence: SequenceExecutionSnapshot | None = None
     observatory: ObservatoryContext
     operational_status: OperationalStatusResponse
     detector_config: DetectorConfig

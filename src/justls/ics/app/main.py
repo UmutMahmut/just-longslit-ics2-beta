@@ -115,6 +115,7 @@ UI_V7_PRESET_RUNTIME = "/ui-assets/v7/preset_runtime.js"
 UI_V7_OBSERVE_RUNTIME = "/ui-assets/v7/observe_runtime.js"
 UI_V7_OBSERVE_GUARD = "/ui-assets/v7/observe_guard.js"
 UI_V7_CAMERA_RUNTIME = "/ui-assets/v7/camera_runtime.js"
+UI_V7_SEQUENCE_RUNTIME = "/ui-assets/v7/sequence_runtime.js"
 
 PHASE_2D6_V5_ADAPTER_ENABLED_ENV = "JUSTLS_UI_PHASE2D6_ADAPTER_ENABLED"
 PHASE_2D6_V6_ENABLED_ENV = "JUSTLS_UI_V6_ENABLED"
@@ -172,14 +173,14 @@ def phase_2d8_v7_runtime_status_enabled() -> bool:
     return env_flag(PHASE_2D8_V7_RUNTIME_STATUS_ENABLED_ENV, default=True)
 
 def phase_2d8_v7_setup_runtime_enabled() -> bool:
-    return env_flag(PHASE_2D8_V7_SETUP_RUNTIME_ENABLED_ENV, default=False)
+    return env_flag(PHASE_2D8_V7_SETUP_RUNTIME_ENABLED_ENV, default=True)
 
 def phase_2d8_v7_instrument_runtime_enabled() -> bool:
-    return env_flag(PHASE_2D8_V7_INSTRUMENT_RUNTIME_ENABLED_ENV, default=False)
+    return env_flag(PHASE_2D8_V7_INSTRUMENT_RUNTIME_ENABLED_ENV, default=True)
 
 
 def phase_2d8_v7_preset_runtime_enabled() -> bool:
-    return env_flag(PHASE_2D8_V7_PRESET_RUNTIME_ENABLED_ENV, default=False)
+    return env_flag(PHASE_2D8_V7_PRESET_RUNTIME_ENABLED_ENV, default=True)
 
 
 def phase_2d8_v7_observe_runtime_enabled() -> bool:
@@ -225,7 +226,10 @@ def phase_2d8_v7_runtime_scripts() -> tuple[str, ...]:
         scripts.append(UI_V7_OBSERVE_RUNTIME)
     if flags["observe_guard"]:
         scripts.append(UI_V7_OBSERVE_GUARD)
-    scripts.append(UI_V7_CAMERA_RUNTIME)
+    if flags["observe"]:
+        scripts.append(UI_V7_SEQUENCE_RUNTIME)
+    if phase_2d8_v7_runtime_enabled():
+        scripts.append(UI_V7_CAMERA_RUNTIME)
     return tuple(scripts)
 
 

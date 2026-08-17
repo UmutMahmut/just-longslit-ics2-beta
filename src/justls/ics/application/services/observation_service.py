@@ -47,6 +47,26 @@ class ObservationService:
             }
         return self.runtime.detector.get_snapshot().to_dict()
 
+    def _enforce_sequence_ownership(self, *, sequence_owned: bool) -> None:
+        if sequence_owned:
+            return
+        sequence = self.runtime.sequence_execution
+        if sequence is None or sequence.state.value in {
+            "completed",
+            "aborted",
+            "failed",
+        }:
+            return
+        raise InterlockBlockedError(
+            "Direct exposure commands are blocked while an observation sequence is active.",
+            subsystem="detector",
+            details={
+                "sequence_plan_id": sequence.plan.plan_id,
+                "sequence_state": sequence.state.value,
+                "use_sequence_commands": True,
+            },
+        )
+
     def _setup_context_payloads(self) -> tuple[dict | None, dict | None]:
         if self.setup_context_service is None:
             return None, None
@@ -272,8 +292,16 @@ class ObservationService:
         exp_time_s: float,
         frame_type: str = "science",
         operator_note: str | None = None,
+        setup_context_override: dict | None = None,
+        data_preview_override: dict | None = None,
+        sequence_owned: bool = False,
     ) -> DispatchResult:
+        self._enforce_sequence_ownership(sequence_owned=sequence_owned)
         setup_context, data_preview = self._setup_context_payloads()
+        if setup_context_override is not None:
+            setup_context = setup_context_override
+        if data_preview_override is not None:
+            data_preview = data_preview_override
 
         self._enforce_arm_preview_gate(
             exp_time_s=exp_time_s,
@@ -300,7 +328,8 @@ class ObservationService:
         )
         return self.dispatcher.dispatch(request)
 
-    def start(self) -> DispatchResult:
+    def start(self, *, sequence_owned: bool = False) -> DispatchResult:
+        self._enforce_sequence_ownership(sequence_owned=sequence_owned)
         request = CommandRequest.create(
             subsystem="detector",
             action="start_exposure",
@@ -309,7 +338,8 @@ class ObservationService:
         )
         return self.dispatcher.dispatch(request)
 
-    def finish(self) -> DispatchResult:
+    def finish(self, *, sequence_owned: bool = False) -> DispatchResult:
+        self._enforce_sequence_ownership(sequence_owned=sequence_owned)
         request = CommandRequest.create(
             subsystem="detector",
             action="finish_exposure",
@@ -318,7 +348,8 @@ class ObservationService:
         )
         return self.dispatcher.dispatch(request)
 
-    def stop_readout(self) -> DispatchResult:
+    def stop_readout(self, *, sequence_owned: bool = False) -> DispatchResult:
+        self._enforce_sequence_ownership(sequence_owned=sequence_owned)
         request = CommandRequest.create(
             subsystem="detector",
             action="stop_readout",
@@ -327,7 +358,8 @@ class ObservationService:
         )
         return self.dispatcher.dispatch(request)
 
-    def abort_discard(self) -> DispatchResult:
+    def abort_discard(self, *, sequence_owned: bool = False) -> DispatchResult:
+        self._enforce_sequence_ownership(sequence_owned=sequence_owned)
         request = CommandRequest.create(
             subsystem="detector",
             action="abort_discard",

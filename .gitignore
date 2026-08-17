@@ -52,3 +52,6 @@ dist/
 
 # ICS_beta generated FITS and quicklook products
 var/
+
+# Local persisted operator setup context
+.justls/

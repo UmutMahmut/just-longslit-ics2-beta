@@ -13,6 +13,9 @@ from justls.ics.application.services.observatory_context_service import (
     ObservatoryContextService,
 )
 from justls.ics.application.services.observation_service import ObservationService
+from justls.ics.application.services.observation_sequence_service import (
+    ObservationSequenceService,
+)
 from justls.ics.application.services.observation_preview_service import ObservationPreviewService
 from justls.ics.application.services.setup_context_service import SetupContextService
 from justls.ics.application.services.setup_context_store import JsonSetupContextStore
@@ -268,3 +271,23 @@ def get_observation_service(
 
 
 ObservationServiceDep = Annotated[ObservationService, Depends(get_observation_service)]
+
+
+def get_observation_sequence_service(
+    runtime: RuntimeDep,
+    observation_service: ObservationServiceDep,
+    observation_preview_service: ObservationPreviewServiceDep,
+    setup_context_service: SetupContextServiceDep,
+) -> ObservationSequenceService:
+    return ObservationSequenceService(
+        runtime,
+        observation_service,
+        observation_preview_service,
+        setup_context_service,
+    )
+
+
+ObservationSequenceServiceDep = Annotated[
+    ObservationSequenceService,
+    Depends(get_observation_sequence_service),
+]

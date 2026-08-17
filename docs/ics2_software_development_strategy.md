@@ -2,7 +2,7 @@
 
 ```text
 Scope: software strategy for JUST Long-Slit ICS 2.0
-Status: after Phase 2.9-E exposure-record and observatory-context closeout
+Status: after Phase 2.9-F operator workflow and Phase 3.0-A sequence baseline
 ```
 
 ## Mission
@@ -179,9 +179,10 @@ v7 runtime master gate     default on
 runtime_status.js          default on
 observe_runtime.js         default on
 observe_guard.js           default on
-setup_runtime.js           default off
-instrument_runtime.js      default off
-preset_runtime.js          default off
+setup_runtime.js           default on
+instrument_runtime.js      default on
+preset_runtime.js          default on
+sequence_runtime.js        default on with Observe
 ```
 
 Reasoning:
@@ -189,7 +190,8 @@ Reasoning:
 - Observe is now part of the active command-feedback workflow.
 - Status runtime is needed for operator context.
 - Observe guard is a UI guard, not a backend safety authority.
-- Setup/Instrument/Presets runtimes should stay explicit until their runtime behavior is equally mature.
+- Setup/Instrument/Presets now share the default operator workflow and remain individually disableable for troubleshooting.
+- Sequence execution remains operator-stepped; runtime JavaScript does not become backend authority.
 
 HTML owns durable structure. Runtime JavaScript enhances existing skeletons and should not create duplicate competing panels except as a fallback when a skeleton is missing.
 
@@ -203,34 +205,37 @@ Phase 2.9-B  Observation Request / Preview / Arm Gate
 Phase 2.9-C  Observation Command Feedback + v7 Observe feedback UI
 Phase 2.9-D  ExposureRecord / DataProductRef contract
 Phase 2.9-E  Read-only ObservatoryContext
+Phase 2.9-F  Operator Workflow Polish
+Phase 3.0-A  Observation Plan / operator-stepped Sequence Contract
 ```
 
 ### Candidate next phases
 
-#### Phase 2.9-F: Operator Workflow Polish
+#### Phase 3.0-B: Durable Sequence Recovery Contract
 
-Goal: improve operator comprehension without expanding hardware authority.
+Goal: define restart, reconciliation, retry, and acknowledgement behavior before unattended execution.
 
 Candidate work:
 
 ```text
-Preset diff polish
-Diagnostics command/error polish
-Observe feedback and exposure-record wording
-Housekeeping/Engineer responsibility split
+plan/execution persistence boundary
+file-system reconciliation after restart
+retry versus fail-fast rules
+operator acknowledgement and recovery actions
 ```
 
-#### Phase 3.0: Observation Plan / Sequence Contract
+#### Phase 3.x: Unattended Simulator Execution
 
-Goal: introduce multi-exposure observing intent after record semantics are stable.
+Goal: add timed auto-advance only after durable recovery semantics are accepted.
 
 Candidate concepts:
 
 ```text
-ObservationPlan
-SequencePreview
-PlanExecutionState
-pause/abort/recover semantics
+background execution ownership
+exposure deadline and automatic readout ownership
+timeout and cancellation behavior
+automatic step transitions
+restart-safe audit continuity
 ```
 
 ### Later phases
@@ -240,7 +245,7 @@ Phase 3.x  Simulator-backed end-to-end observing workflow
 Phase 4.x  Real-hardware commissioning through adapter contracts
 ```
 
-Do not start a multi-exposure sequence runner before the current ExposureRecord/DataProductRef contract is accepted as the baseline.
+The current sequence baseline is deliberately in-memory and operator-stepped. Do not add unattended background execution before durable recovery and reconciliation semantics are accepted.
 
 ## Technology adoption gate
 

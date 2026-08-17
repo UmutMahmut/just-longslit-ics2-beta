@@ -176,6 +176,7 @@ class HealthService:
             "capabilities": self.get_capabilities(),
             "calibration": self.get_calibration_status(),
             "observation": self.get_observation_status(),
+            "observation_sequence": self.runtime.sequence_execution,
             "observatory": self.get_observatory_context(),
             "operational_status": self.get_operational_status(),
             "detector_config": self.runtime.get_detector_config_dict(),

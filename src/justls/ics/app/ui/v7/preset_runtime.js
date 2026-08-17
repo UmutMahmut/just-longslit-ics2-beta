@@ -1,6 +1,4 @@
-// v7 opt-in preset runtime adapter.
-// Injected only when JUSTLS_UI_V7_RUNTIME_ENABLED=1 and
-// JUSTLS_UI_V7_PRESET_RUNTIME_ENABLED=1.
+// v7 preset runtime adapter. Default-on during Phase 2.9-F.
 
 (function () {
   "use strict";
@@ -21,6 +19,8 @@
     lastApplyResult: null,
     lastError: null,
     catalogLoadedAt: null,
+    lastRequestId: null,
+    lastCommand: null,
   };
   window[GLOBAL_KEY] = runtime;
 
@@ -129,6 +129,26 @@
     setText(bind("v7.presets.catalog_loaded_at"), runtime.catalogLoadedAt || "not loaded");
     setText(bind("v7.presets.runtime_state"), runtimeStateLabel());
     setText(bind("v7.presets.last_error"), runtime.lastError || "none");
+    setText(bind("v7.presets.last_command"), runtime.lastCommand || "none");
+    setText(bind("v7.presets.request_id"), runtime.lastRequestId || "not available");
+    const job = runtime.lastApplyResult && (runtime.lastApplyResult.latest_job || runtime.lastApplyResult.job_id);
+    setText(bind("v7.presets.latest_job"), job ? (typeof job === "string" ? job : [job.status, job.job_id].filter(Boolean).join(" - ")) : "not available");
+    const summary = runtime.lastError
+      ? `${runtime.lastCommand || "preset"}: ${runtime.lastError}`
+      : runtime.lastCommand
+        ? `${runtime.lastCommand}: succeeded`
+        : "ready";
+    setText(bind("v7.presets.result_summary"), summary);
+  }
+
+  function requestIdFrom(response) {
+    return response.headers.get("x-request-id") || response.headers.get("X-Request-ID") || runtime.lastRequestId;
+  }
+
+  function errorMessage(payload, response) {
+    const detail = payload && payload.detail;
+    if (detail && detail.message) return `${detail.code || "error"}: ${detail.message}`;
+    return `HTTP ${response.status}`;
   }
 
   function renderCatalog() {
@@ -172,7 +192,9 @@
     setText(bind("v7.presets.status"), `loading ${PRESETS_ENDPOINT}...`);
     try {
       const response = await fetch(PRESETS_ENDPOINT, { cache: "no-store", headers: { Accept: "application/json" } });
+      runtime.lastRequestId = requestIdFrom(response);
       const payload = await response.json();
+      if (!response.ok) throw new Error(errorMessage(payload, response));
       runtime.items = Array.isArray(payload.items) ? payload.items : [];
       runtime.catalogLoadedAt = new Date().toISOString();
       renderCatalog();
@@ -191,6 +213,7 @@
 
     runtime.previewInFlight = true;
     runtime.lastError = null;
+    runtime.lastCommand = "preview_preset";
     setCatalogButtonsDisabled(true);
     refreshRuntimeState();
     setText(bind("v7.presets.status"), `previewing ${name}...`);
@@ -201,7 +224,9 @@
         cache: "no-store",
         body: JSON.stringify({ name, confirmed: false }),
       });
+      runtime.lastRequestId = requestIdFrom(response);
       const payload = await response.json();
+      if (!response.ok) throw new Error(errorMessage(payload, response));
       runtime.preview = payload;
       runtime.lastPreview = payload;
       setText(bind("v7.presets.preview"), JSON.stringify(payload, null, 2));
@@ -247,6 +272,7 @@
 
     runtime.applying = true;
     runtime.lastError = null;
+    runtime.lastCommand = "apply_preset";
     refreshApplyGuard();
     refreshRuntimeState();
     setText(bind("v7.presets.apply_result"), "sending guarded apply request...");
@@ -257,7 +283,9 @@
         cache: "no-store",
         body: JSON.stringify({ name: runtime.preview.preset, confirmed: Boolean(runtime.preview.requires_confirmation) }),
       });
+      runtime.lastRequestId = requestIdFrom(response);
       const payload = await response.json();
+      if (!response.ok) throw new Error(errorMessage(payload, response));
       runtime.lastApplyResult = payload;
       setText(bind("v7.presets.apply_result"), JSON.stringify(payload, null, 2));
     } catch (error) {

@@ -28,12 +28,12 @@ def test_ui_root_is_default_v7_operator_console_prototype(monkeypatch):
     assert "/ui-assets/v5/phase2d6_operational_status.js" not in response.text
 
     assert "/ui-assets/v7/runtime_status.js" in response.text
+    assert "/ui-assets/v7/setup_runtime.js" in response.text
+    assert "/ui-assets/v7/instrument_runtime.js" in response.text
+    assert "/ui-assets/v7/preset_runtime.js" in response.text
     assert "/ui-assets/v7/observe_runtime.js" in response.text
     assert "/ui-assets/v7/observe_guard.js" in response.text
-
-    assert "/ui-assets/v7/setup_runtime.js" not in response.text
-    assert "/ui-assets/v7/instrument_runtime.js" not in response.text
-    assert "/ui-assets/v7/preset_runtime.js" not in response.text
+    assert "/ui-assets/v7/sequence_runtime.js" in response.text
 
     assert 'data-role="v7-message-rail"' in response.text
     assert "Operator Feedback" in response.text
@@ -77,9 +77,9 @@ def test_ui_v7_default_runtime_injects_status_observe_and_guard(monkeypatch):
     assert switches["phase2d8_v7_runtime_enabled"] is True
     assert switches["phase2d8_v7_runtime_modules"] == {
         "status": True,
-        "setup": False,
-        "instrument": False,
-        "presets": False,
+        "setup": True,
+        "instrument": True,
+        "presets": True,
         "observe": True,
         "observe_guard": True,
     }
@@ -91,12 +91,12 @@ def test_ui_v7_default_runtime_injects_status_observe_and_guard(monkeypatch):
     assert "Instrument / Configure" in response.text
 
     assert "/ui-assets/v7/runtime_status.js" in response.text
+    assert "/ui-assets/v7/setup_runtime.js" in response.text
+    assert "/ui-assets/v7/instrument_runtime.js" in response.text
+    assert "/ui-assets/v7/preset_runtime.js" in response.text
     assert "/ui-assets/v7/observe_runtime.js" in response.text
     assert "/ui-assets/v7/observe_guard.js" in response.text
-
-    assert "/ui-assets/v7/setup_runtime.js" not in response.text
-    assert "/ui-assets/v7/instrument_runtime.js" not in response.text
-    assert "/ui-assets/v7/preset_runtime.js" not in response.text
+    assert "/ui-assets/v7/sequence_runtime.js" in response.text
 
 
 def test_v7_default_and_explicit_v7_shells_are_aligned():

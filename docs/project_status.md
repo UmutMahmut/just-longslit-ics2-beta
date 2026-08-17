@@ -4,180 +4,111 @@
 
 ```text
 Project: ICS Beta
-Status: campus camera vertical slice implemented in simulation
-Validation: pytest -q -> 249 passed
-Current emphasis: preserve the ICS 2.0 UI and contracts while preparing ZWO driver replacement
+Status: simulator-backed operator workflow and observation sequence baseline
+Validation: pytest -q -> 265 passed
+Current emphasis: stabilize operator-stepped sequences while real camera work remains paused
 ```
 
-This file is a current-state snapshot. It is not a project diary. Historical details should be recovered from git history, not accumulated here.
+This file is a current-state snapshot. Historical detail belongs in git history.
 
-## Current baseline
+## Current Working Loops
 
-ICS Beta inherits the simulator-backed, API-driven ICS 2.0 baseline and adapts
-it to the campus telescope branch.
-
-The current working loop is:
+Single exposure:
 
 ```text
-Setup/session context
-  -> ObservationRequest / preview
-  -> backend readiness gate
-  -> start science-camera exposure
-  -> finish or early stop/readout
-  -> ObservationCommandFeedbackResponse
-  -> local FITS + PNG quicklook
-  -> ExposureRecord / available DataProductRef
-  -> read-only ObservatoryContext
-  -> v7 Observe summary + raw diagnostics
+Setup/session context -> preview -> backend arm gate -> arm/start
+  -> finish or early stop/readout -> local FITS + PNG quicklook
+  -> ExposureRecord -> operator summary + Diagnostics
 ```
 
-The current default UI route is:
+Multi-exposure:
 
 ```text
-/ui    -> v7.1 operator-console prototype
-/ui/v7 -> explicit v7.1 route
+ObservationPlan -> side-effect-free SequencePreview -> load
+  -> operator starts and completes each step through the single-exposure path
+  -> per-step ExposureRecord -> pause/resume or abort -> terminal sequence state
 ```
 
-The v5 fallback remains available:
+The sequence executor is intentionally in-memory and operator-stepped. It does not run a background timer, survive process restart, or schedule observatory resources.
 
-```text
-/ui/v5
-/ui/legacy
-```
+Single exposures use the same explicit lifecycle: `Start` enters exposing, and
+the operator chooses Finish or Stop & Readout. The requested exposure time is
+recorded and passed to the detector path, but this baseline does not schedule an
+automatic completion callback.
 
 ## Completed Baseline
 
-Established:
+- FastAPI `/api/v1/*` surface with request IDs and structured errors.
+- Runtime state, jobs, latest-job visibility, and backend mutation guards.
+- Setup/session context persistence and per-sequence-step file-stem snapshots.
+- Slit, calibration, detector configuration, and guarded presets.
+- Single-exposure preview, authoritative arm gate, command feedback, and lifecycle.
+- Local simulated FITS/PNG writer with honest simulated provenance.
+- `ExposureRecord`, `DataProductRef`, quicklook, checksum, physical-camera and shared B/G/R capture metadata.
+- Read-only unavailable/stale-aware observatory context without write authority.
+- Default-on v7 Setup, Instrument, Presets, Observe, status, camera, sequence, and safety-guard runtimes.
+- Operator summaries for request IDs, jobs, errors, exposure records, data products, and sequence progress.
+- `ObservationPlan`, per-step `SequencePreview`, `SequenceExecutionSnapshot`, pause-after-active-step, resume, early readout, and abort/discard semantics.
+- Backend sequence ownership: direct exposure commands are blocked while a sequence is active.
 
-- FastAPI application and `/api/v1/*` control/status surface.
-- Request ID middleware and structured error responses.
-- Runtime/subsystem state aggregation.
-- Exposure state model.
-- Job tracking and latest-job read model.
-- Simulation-first assembly path.
-- Setup/session context model, service, JSON store, and API.
-- Slit width and slit-angle API surfaces with arcsec/um unit boundary.
-- Calibration status/mode/lamp API surfaces and simulator state.
-- Detector configuration visibility and guarded mutation.
-- Preset catalog, preview, guarded apply, risk/confirmation metadata, and observation metadata linkage.
-- Observation request, side-effect-free preview, readiness snapshot, validation issues, and backend arm gate.
-- Observation command feedback for success, blocked, and failed command results.
-- v7 status runtime, Observe runtime, and Observe guard default-on.
+## Sequence Boundary
 
-## Exposure Records
+The current sequence contract supports 1-100 exposure steps. Every step:
 
-The beta branch now provides:
+- is previewed without side effects;
+- is armed through the existing readiness gate;
+- uses the existing detector lifecycle;
+- creates the existing exposure/data-product record;
+- carries a distinct setup file-stem preview;
+- is visible through status and auditable jobs.
 
-- `ExposureRecord`, `FrameRecord`, `DataProductRef`, `FitsHeaderSummary`, and `QualityFlag`.
-- Latest exposure record attached to detector snapshots and observation metadata.
-- Completed simulator exposures produce actual local FITS and PNG quicklook files.
-- Discarded exposures explicitly report `not_created` data-product state.
-- Products retain `simulated=true` provenance and `SIMULATE=true` FITS metadata.
-- Physical camera ID, B/G/R logical-channel aliases, and a shared capture ID are recorded.
+Not yet implemented:
 
-Important boundary:
+- automatic time-based step completion or unattended auto-advance;
+- timer-driven automatic completion/readout for a started exposure;
+- durable plan/execution persistence and restart recovery;
+- per-step automatic instrument/preset reconfiguration;
+- retry policy after hardware failure;
+- OCS submission or scheduling.
 
-```text
-Exposure completion only succeeds after the local FITS and quicklook writer returns.
-The files exist, but simulated pixels must never be presented as sky data.
-Archive/catalog persistence remains a future concern.
-```
+## Explicitly Deferred
 
-## Observatory Context
-
-Established in Phase 2.9-E:
-
-- `ObservatoryContext` and `ObservatoryComponentContext`.
-- `GET /api/v1/observatory/context`.
-- `/api/v1/status/full` includes observatory context.
-- OCS, TCS, telescope, dome, weather, and guider are visible as unavailable by default.
-- The context is explicitly read-only and exposes no telescope/dome/weather write route.
-
-Important boundary:
-
-```text
-ICS can expose observatory context.
-ICS still has no telescope, dome, weather, or OCS write authority.
-```
-
-## Current Test Baseline
-
-Current reported validation:
-
-```text
-pytest -q
-249 passed
-```
-
-This means code and tests are aligned with the current runtime/default route behavior.
-
-## Explicitly Not Implemented
-
-The following are intentionally not part of the current baseline:
-
-- multi-exposure sequence runner;
-- observation plan executor;
-- durable DataProduct archive/catalog persistence;
-- durable ExposureRecord persistence beyond current runtime state;
-- OCS adapter;
-- TCS telescope control;
-- real TCS readiness integration;
-- telescope pointing, rotator, guiding, dome, or weather authority;
-- real hardware communication protocols;
-- ZWO SDK science-camera and slit-camera drivers;
-- independent physical B/G/R camera control;
-- closed-loop guiding;
-- role-based authentication or operator/engineer permission enforcement.
+- ZWO SDK drivers and real dual-camera hardware integration;
+- independent physical B/G/R cameras;
+- real TCS readiness or telescope/dome/weather write authority;
+- durable DataProduct archive/catalog database;
+- authentication and operator/engineer permission enforcement;
+- closed-loop guiding and real hardware protocols.
 
 ## Current Phase Status
 
 ```text
-Phase 2.9-A  Setup/Data Context                         closed
+Phase 2.9-A  Setup/Data Context                           closed
 Phase 2.9-B  Observation Request / Preview / Arm Gate    closed
-Phase 2.9-C  Observation Command Feedback + v7 Observe   closed
-Phase 2.9-D  ExposureRecord / DataProductRef Contract    closed
+Phase 2.9-C  Command Feedback + v7 Observe               closed
+Phase 2.9-D  ExposureRecord / DataProductRef             closed
 Phase 2.9-E  Read-only Observatory Context               closed
+Phase 2.9-F  Operator Workflow Polish                    baseline complete
+Phase 3.0-A  Observation Plan / Sequence Contract        baseline complete
 ```
 
-## Recommended Next Feature Phase
+## Recommended Next Boundary
 
-The next phase should begin only after the exact ZWO models, serial numbers, SDK
-version, supported pixel formats, and exposure/readout calls are known:
+Before adding unattended execution, define and test durable recovery semantics:
 
-- implement SDK drivers behind the existing adapters;
-- add timeout, disconnect, abort, and reconnect contracts;
-- perform desk tests with each camera separately;
-- then perform telescope/spectrograph hardware-in-loop tests.
+- what survives process restart;
+- how a partially completed plan is reconciled with files on disk;
+- retry versus fail-fast rules;
+- operator acknowledgement after failure;
+- when setup frame indices are committed.
 
-The manually selected grating, fixed nominal 25 µm slit, and second Nasmyth
-visual optical path remain observing metadata/operational facts, not software
-control responsibilities in this beta phase.
+Real ZWO work remains paused until exact models, serials, SDK version, pixel formats, and exposure/readout calls are verified.
 
 ## Engineering Cautions
 
-- Do not let frontend preview state become safety authority.
-- Do not present placeholder telemetry as real.
-- Do not add telescope write-control inside ICS without an OCS/TCS contract.
-- Do not introduce a database just because persistence will eventually matter.
-- Do not imply that B/G/R aliases are three physical cameras.
-- Do not imply that simulated FITS files contain sky data.
-- Do not keep appending history to this document. Rewrite the snapshot when the phase changes.
-
-## Documentation State
-
-This document should be rewritten at phase boundaries.
-
-Other durable documents:
-
-```text
-README.md
-docs/ics2_software_development_strategy.md
-docs/operator_console_requirements.md
-```
-
-Rules:
-
-- README states current facts.
-- Project status states current snapshot.
-- Software strategy changes only when strategy changes.
-- Operator-console requirements change only when UI responsibility boundaries or hardware facts change.
+- Frontend guards are advisory; backend guards remain authoritative.
+- Do not present simulated files as sky data.
+- Do not imply B/G/R aliases are separate physical cameras.
+- Do not add OCS/TCS write authority without an external contract.
+- Do not describe the in-memory, operator-stepped executor as unattended automation.
+- Do not introduce a database until restart/recovery requirements justify it.

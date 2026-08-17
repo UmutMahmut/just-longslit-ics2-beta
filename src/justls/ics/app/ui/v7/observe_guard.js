@@ -1,4 +1,4 @@
-// v7 opt-in observe button guard.
+// v7 observe button guard. Default-on with the operator workflow runtime.
 // This frontend-only guard does not call backend APIs.
 
 (function () {
@@ -11,6 +11,7 @@
     observer: null,
     retryTimer: null,
     lastAllowed: null,
+    sequenceActive: false,
   };
   window[GLOBAL_KEY] = runtime;
 
@@ -34,6 +35,15 @@
   }
 
   function allowed() {
+    if (runtime.sequenceActive) {
+      return {
+        "obs-arm": false,
+        "obs-start": false,
+        "obs-finish": false,
+        "obs-stop-readout": false,
+        "obs-abort-discard": false,
+      };
+    }
     const name = currentState();
     const armed = armedLabel() !== "not armed" || name.includes("armed");
     const active = name.includes("expos") || name.includes("integrat") || name.includes("running");
@@ -73,6 +83,12 @@
     checkbox.addEventListener("change", refresh);
   }
 
+  function handleSequenceState(event) {
+    const snapshot = event && event.detail;
+    runtime.sequenceActive = Boolean(snapshot) && !["completed", "aborted", "failed"].includes(snapshot.state);
+    refresh();
+  }
+
   function start() {
     const host = panel();
     if (!host) {
@@ -94,6 +110,7 @@
 
     runtime.started = true;
     window.addEventListener("justls:v7-observe-state", refresh);
+    window.addEventListener("justls:v7-sequence-state", handleSequenceState);
 
     // Keep a narrow observer as a fallback for skeleton replacement only. The
     // observe runtime dispatches justls:v7-observe-state after status updates,

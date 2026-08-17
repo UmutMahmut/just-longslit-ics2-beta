@@ -97,11 +97,13 @@ Responsibility:
 - exposure time, frame type, operator note;
 - preview readiness/validation visibility;
 - arm/start/finish/stop-readout/abort-discard command path;
+- clear notice that the current baseline requires explicit Finish or Stop & Readout after Start;
 - command feedback summary;
 - latest exposure record and data-product reference summary;
 - latest preview/placeholder image areas.
+- multi-exposure plan entry, preview, load, progress, pause/resume, and abort controls.
 
-Observe is not a sequence runner until sequence contracts exist.
+Sequence controls must remain visibly operator-stepped until unattended execution and restart recovery contracts exist. An active sequence owns the detector command path; backend guards must reject competing direct exposure commands.
 
 ### Presets
 
@@ -152,16 +154,12 @@ Default-on:
 
 ```text
 runtime_status.js
-observe_runtime.js
-observe_guard.js
-```
-
-Default-off:
-
-```text
 setup_runtime.js
 instrument_runtime.js
 preset_runtime.js
+observe_runtime.js
+observe_guard.js
+sequence_runtime.js
 ```
 
 Reasoning:
@@ -169,7 +167,7 @@ Reasoning:
 - Observe command feedback is now part of the active operator loop.
 - Status runtime gives useful current context.
 - Observe guard helps prevent accidental abort/discard actions.
-- Setup, Instrument, and Presets runtimes should remain explicit until their runtime behavior is mature enough for default use.
+- Setup, Instrument, Presets, and Sequence now participate in the default operator workflow and remain individually disableable for troubleshooting.
 
 Frontend guards are advisory. Backend API and kernel/application checks remain authoritative.
 
@@ -306,7 +304,7 @@ Unavailable or stale context must be shown honestly.
 | Capability | Current backend/API | UI location | Control level | Notes |
 |---|---|---|---|---|
 | Health/status | `GET /health`, `/status`, `/status/full` | top cards, Diagnostics | visible status | Runtime status default-on. |
-| Setup context | `GET/PUT/reload /setup/context` | Setup | backend contract exists | Runtime remains default-off. |
+| Setup context | `GET/PUT/reload /setup/context` | Setup | operator control | Runtime default-on with request-ID/error summary. |
 | Slit width | `POST /slit` | Instrument / Configure | operator control candidate | Preserve arcsec/um conversion. |
 | Slit angle | `POST /slit_angle` | Instrument / Configure | operator control candidate | Routine control only with feedback. |
 | Calibration status/mode/lamp | `/calibration/*` | Instrument / Configure | operator control candidate | Mode/lamp/frame advisory visible. |
@@ -317,7 +315,8 @@ Unavailable or stale context must be shown honestly.
 | Observation commands | `/observation/arm/start/finish/stop_readout/abort_discard` | Observe | operator control | Returns command feedback. |
 | B/G/R channels | detector/config summary only | Instrument / Configure | visible placeholder/status | No fake telemetry. |
 | TCS/observatory | `GET /observatory/context`, `/status/full` | future Setup/Observe/Diagnostics | visible placeholder/status | Read-only and unavailable by default; no telescope control. |
-| Data products | `latest_exposure_record` on observation/status payloads | future Diagnostics/Observe | visible status | Simulator references only; do not imply FITS writer exists. |
+| Data products | `latest_exposure_record` on observation/status payloads | Diagnostics/Observe | visible status | Local FITS/PNG files exist in simulation and remain explicitly marked simulated. |
+| Observation sequence | `/observation/sequence/*` | Observe, Diagnostics | operator control | In-memory, operator-stepped, auditable; no unattended auto-advance or restart recovery. |
 | Engineer controls | not implemented | Engineer | deferred | Future role gating. |
 
 ## Reference usage
@@ -375,9 +374,10 @@ Do not copy:
 
 The following remain deferred:
 
-- sequence runner;
-- observing plan editor/executor;
-- FITS writer;
+- unattended/background sequence execution;
+- timer-driven automatic exposure completion/readout;
+- durable observing-plan persistence and restart recovery;
+- full visual plan editor and per-step automatic reconfiguration;
 - durable DataProduct pipeline beyond current data-product reference contract;
 - quicklook/data watcher;
 - real B/G/R camera control;

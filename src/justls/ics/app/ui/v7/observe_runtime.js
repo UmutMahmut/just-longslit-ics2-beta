@@ -1,6 +1,4 @@
-// v7 opt-in observe runtime adapter.
-// Injected only when JUSTLS_UI_V7_RUNTIME_ENABLED=1 and
-// JUSTLS_UI_V7_OBSERVE_RUNTIME_ENABLED=1.
+// v7 observe runtime adapter. Default-on during Phase 2.9-F.
 
 (function () {
   "use strict";
@@ -24,6 +22,7 @@
     lastResult: null,
     lastError: null,
     lastRequestId: null,
+    localRefreshBound: false,
   };
   window[GLOBAL_KEY] = runtime;
 
@@ -51,9 +50,9 @@
     panel.className = "panel";
     panel.setAttribute("data-role", "v7-observe-panel");
     panel.setAttribute("data-origin", "runtime-created-observe-skeleton");
-    panel.setAttribute("data-phase", "2.9-B4-runtime-opt-in");
+    panel.setAttribute("data-phase", "2.9-F-operator-workflow");
     panel.innerHTML = `
-      <h2>Observe - Single Exposure Control - Single Exposure Only</h2>
+      <h2>Observe - Exposure and Sequence Control</h2>
       <div class="panel-body grid">
         <div class="field-grid">
           <label>Exposure Time (s)<input type="number" min="0.001" step="0.001" value="30" data-role="obs-exp-time" /></label>
@@ -68,7 +67,7 @@
           <dt>Request ID</dt><dd><code data-bind="v7.observe.request_id">not available</code></dd>
           <dt>Latest Job</dt><dd><code data-bind="v7.observe.latest_job">not available</code></dd>
           <dt>Last Error</dt><dd><code data-bind="v7.observe.last_error">none</code></dd>
-          <dt>Result Summary</dt><dd><code data-bind="v7.observe.result_summary">runtime not enabled</code></dd>
+          <dt>Result Summary</dt><dd><code data-bind="v7.observe.result_summary">no command yet</code></dd>
           <dt>Runtime State</dt><dd><code data-bind="v7.observe.runtime_state">idle</code></dd>
         </dl>
         <div class="badge-row">
@@ -80,6 +79,7 @@
           <button class="btn danger" type="button" data-action="obs-abort-discard">Abort & Discard</button>
         </div>
         <label><input type="checkbox" data-role="obs-abort-confirm" /> Enable abort/discard command</label>
+        <p style="margin: 0; color: var(--muted); font-size: 12px;">This baseline does not auto-finish at the requested exposure time. Use Finish or Stop &amp; Readout; timer-driven completion remains deferred.</p>
         <section class="subpanel" data-role="v7-observe-preview-panel">
           <h3>Observation Preview - Readiness / Validation</h3>
           <dl class="kv">
@@ -103,6 +103,7 @@
           <summary>Raw Command JSON</summary>
           <pre data-bind="v7.observe.result">No observation command sent.</pre>
         </details>
+        <span class="badge live" data-bind="v7.observe.runtime_notice">Operator runtime initializing</span>
       </div>`;
     host.insertBefore(panel, host.firstChild);
     return panel;
@@ -128,16 +129,17 @@
 
   function setPanelButtonsDisabled(panel, disabled) {
     if (!panel) return;
-    panel.querySelectorAll("button[data-action]").forEach((button) => {
+    panel.querySelectorAll('button[data-action^="obs-"]').forEach((button) => {
       button.disabled = disabled;
     });
   }
 
   function enhancePanel(panel) {
+    const firstEnable = panel.getAttribute("data-runtime") !== "enabled";
     panel.setAttribute("data-runtime", "enabled");
-    panel.setAttribute("data-phase", "2.9-B4-runtime-opt-in");
+    panel.setAttribute("data-phase", "2.9-F-operator-workflow");
     bindPanelEvents(panel);
-    setPanelButtonsDisabled(panel, false);
+    if (firstEnable) setPanelButtonsDisabled(panel, false);
     return panel;
   }
 
@@ -160,6 +162,10 @@
 
   function refreshRuntimeState() {
     setText(bind("v7.observe.runtime_state"), runtimeStateLabel());
+    setText(bind("v7.observe.runtime_notice"), runtime.started ? "Operator runtime enabled" : "Operator runtime initializing");
+    if (!runtime.lastCommand && !runtime.lastError) {
+      setText(bind("v7.observe.result_summary"), "no command yet");
+    }
   }
 
   function setBusy(value) {
@@ -409,6 +415,7 @@
   function renderStatus(payload) {
     runtime.lastStatus = payload || {};
     const armed = runtime.lastStatus.armed_exposure || runtime.lastStatus.last_exposure || null;
+    const record = runtime.lastStatus.latest_exposure_record || (runtime.lastStatus.observation_meta && runtime.lastStatus.observation_meta.exposure_record) || null;
 
     setText(
       bind("v7.observe.state"),
@@ -417,6 +424,19 @@
     setText(
       bind("v7.observe.armed"),
       armed ? `${armed.frame_type || "frame"} - ${armed.exp_time_s || "?"} s` : "not armed",
+    );
+    setText(bind("v7.observe.record.id"), record ? record.record_id : "not available");
+    setText(
+      bind("v7.observe.record.provenance"),
+      record ? `${record.simulated ? "SIMULATED" : "REAL"} - ${record.data_product_state || "unknown"}` : "not available",
+    );
+    setText(
+      bind("v7.observe.record.fits"),
+      record && record.primary_data_product ? `${record.primary_data_product.state}: ${record.primary_data_product.uri || "no URI"}` : "not created",
+    );
+    setText(
+      bind("v7.observe.record.quicklook"),
+      record && record.quicklook ? `${record.quicklook.state}: ${record.quicklook.uri || "no URI"}` : "not created",
     );
 
     window.dispatchEvent(new CustomEvent("justls:v7-observe-state", { detail: runtime.lastStatus }));
@@ -590,6 +610,11 @@
   function start() {
     ensurePanel();
     refreshRuntimeState();
+
+    if (!runtime.localRefreshBound) {
+      runtime.localRefreshBound = true;
+      window.addEventListener("justls:v7-local-refresh", refreshStatus);
+    }
 
     if (runtime.started) {
       refreshStatus();

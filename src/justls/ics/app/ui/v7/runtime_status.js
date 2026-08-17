@@ -221,6 +221,13 @@
     setText('[data-bind="v7.run_mode"]', data.run_mode, "unknown");
     setText('[data-bind="v7.runtime_status.refresh_count"]', runtime.refreshCount, "0");
     setText('[data-bind="v7.latest_job"]', latestJobLabel(data), "not available");
+    const observation = data.observation || {};
+    const record = observation.latest_exposure_record || (observation.observation_meta && observation.observation_meta.exposure_record) || null;
+    const sequence = data.observation_sequence || null;
+    setText('[data-bind="v7.diagnostics.data_provenance"]', record ? `${record.simulated ? "SIMULATED" : "REAL"} - ${record.data_product_state || "unknown"}` : "no exposure record", "no exposure record");
+    setText('[data-bind="v7.diagnostics.latest_fits"]', record && record.primary_data_product ? `${record.primary_data_product.state}: ${record.primary_data_product.uri || "no URI"}` : "not created", "not created");
+    setText('[data-bind="v7.diagnostics.latest_quicklook"]', record && record.quicklook ? `${record.quicklook.state}: ${record.quicklook.uri || "no URI"}` : "not created", "not created");
+    setText('[data-bind="v7.diagnostics.sequence"]', sequence ? `${sequence.state} - step ${Math.min(sequence.current_index + 1, sequence.plan.exposures.length)}/${sequence.plan.exposures.length}` : "not loaded", "not loaded");
     bindConnectionDiagnostics();
     let raw = JSON.stringify(data, null, 2);
     if (raw.length > RAW_MAX_CHARS) raw = `${raw.slice(0, RAW_MAX_CHARS)}\n... truncated ...`;
@@ -260,7 +267,7 @@
     bindSetup(data, operational, observation, detector);
     bindInstrument(data, detector);
     bindDiagnostics(data);
-    bindMessage(`Runtime status connected · ${rttLabel()} · request ${runtime.lastRequestId || "not available"}`, "Phase 2.8-H", "success");
+    bindMessage(`Runtime status connected · ${rttLabel()} · request ${runtime.lastRequestId || "not available"}`, "Phase 2.9-F", "success");
   }
 
   async function refresh() {
@@ -302,7 +309,7 @@
     ensureSetupPanel();
     ensureRawPreview();
     bindConnectionDiagnostics();
-    bindMessage("Runtime status initializing...", "Phase 2.8-H", "info");
+    bindMessage("Runtime status initializing...", "Phase 2.9-F", "info");
     window.addEventListener("justls:v7-local-refresh", refresh);
     if (runtime.started) {
       refresh();

@@ -62,6 +62,8 @@ def test_openapi_observation_responses_are_typed():
     status_schema = data["paths"]["/api/v1/observation/status"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
     arm_schema = data["paths"]["/api/v1/observation/arm"]["post"]["responses"]["200"]["content"]["application/json"]["schema"]
     start_schema = data["paths"]["/api/v1/observation/start"]["post"]["responses"]["200"]["content"]["application/json"]["schema"]
+    sequence_preview_schema = data["paths"]["/api/v1/observation/sequence/preview"]["post"]["responses"]["200"]["content"]["application/json"]["schema"]
+    sequence_load_schema = data["paths"]["/api/v1/observation/sequence/load"]["post"]["responses"]["200"]["content"]["application/json"]["schema"]
 
     assert "$ref" in status_schema
     assert status_schema["$ref"].endswith("/ObservationStatusResponse")
@@ -69,6 +71,8 @@ def test_openapi_observation_responses_are_typed():
     assert arm_schema["$ref"].endswith("/ObservationCommandFeedbackResponse")
     assert "$ref" in start_schema
     assert start_schema["$ref"].endswith("/ObservationCommandFeedbackResponse")
+    assert sequence_preview_schema["$ref"].endswith("/SequencePreview")
+    assert sequence_load_schema["$ref"].endswith("/SequenceCommandFeedbackResponse")
 
 
 def test_openapi_response_components_include_new_models():
@@ -84,6 +88,10 @@ def test_openapi_response_components_include_new_models():
     assert "ObservationStatusResponse" in schemas
     assert "ObservationCommandFeedbackResponse" in schemas
     assert "ObservationCommandErrorResponse" in schemas
+    assert "ObservationPlan" in schemas
+    assert "SequencePreview" in schemas
+    assert "SequenceExecutionSnapshot" in schemas
+    assert "SequenceCommandFeedbackResponse" in schemas
 
 
 def test_openapi_system_and_detector_responses_are_typed():

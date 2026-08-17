@@ -198,7 +198,7 @@
               <dt>Latest Job</dt><dd><code data-bind="v7.instrument.latest_job">not available</code></dd>
               <dt>Last Error</dt><dd><code data-bind="v7.instrument.last_error">none</code></dd>
               <dt>Runtime State</dt><dd><code data-bind="v7.instrument.runtime_state">static fallback</code></dd>
-              <dt>Summary</dt><dd><code data-bind="v7.instrument.result_summary">runtime not enabled</code></dd>
+              <dt>Summary</dt><dd><code data-bind="v7.instrument.result_summary">no command yet</code></dd>
             </dl>
           </div>
         </section>

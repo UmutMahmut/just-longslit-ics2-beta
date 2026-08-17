@@ -10,6 +10,7 @@ def test_v7_runtime_static_assets_are_served_from_v7_directory():
         "status": client.get("/ui-assets/v7/runtime_status.js"),
         "presets": client.get("/ui-assets/v7/preset_runtime.js"),
         "observe": client.get("/ui-assets/v7/observe_runtime.js"),
+        "sequence": client.get("/ui-assets/v7/sequence_runtime.js"),
         "guard": client.get("/ui-assets/v7/observe_guard.js"),
     }
 
@@ -24,6 +25,8 @@ def test_v7_runtime_static_assets_are_served_from_v7_directory():
     assert "/api/v1/observation/arm" in assets["observe"].text
     assert "/api/v1/observation/start" in assets["observe"].text
     assert "/api/v1/observation/stop_readout" in assets["observe"].text
+    assert "/api/v1/observation/sequence/preview" in assets["sequence"].text
+    assert "/api/v1/observation/sequence/finish_step" in assets["sequence"].text
 
 
 def test_v5_operational_adapter_is_served_from_v5_directory():
@@ -55,7 +58,7 @@ def test_v7_runtime_assets_have_expected_panel_markers():
     assert "v7-presets-runtime" in presets.text
     assert "Guarded Apply" in presets.text
     assert "v7-observe-controls" in observe.text
-    assert "Single Exposure Only" in observe.text
+    assert "Exposure and Sequence Control" in observe.text
     assert "data-guard-available" in guard.text
     assert "fetch(" not in guard.text
     assert "new XMLHttpRequest" not in guard.text

@@ -1,6 +1,4 @@
-// v7 opt-in setup runtime adapter.
-// Injected only when JUSTLS_UI_V7_RUNTIME_ENABLED=1 and
-// JUSTLS_UI_V7_SETUP_RUNTIME_ENABLED=1.
+// v7 setup runtime adapter. Default-on during Phase 2.9-F.
 
 (function () {
   "use strict";
@@ -28,6 +26,8 @@
     reloading: false,
     context: null,
     lastError: null,
+    lastRequestId: null,
+    lastCommand: null,
   };
   window[GLOBAL_KEY] = runtime;
 
@@ -67,6 +67,14 @@
 
   function setStatus(message) {
     setText(bind("v7.setup.save_status"), message);
+    setText(bind("v7.setup.last_command"), runtime.lastCommand || "none");
+    setText(bind("v7.setup.request_id"), runtime.lastRequestId || "not available");
+    setText(bind("v7.setup.last_error"), runtime.lastError || "none");
+    setText(bind("v7.setup.result_summary"), message);
+  }
+
+  function requestIdFrom(response) {
+    return response.headers.get("x-request-id") || response.headers.get("X-Request-ID") || runtime.lastRequestId;
   }
 
   function applyContext(context) {
@@ -103,12 +111,14 @@
     if (runtime.loading) return;
     runtime.loading = true;
     runtime.lastError = null;
+    runtime.lastCommand = "load_setup_context";
     setStatus("Loading setup context...");
     try {
       const response = await fetch(SETUP_CONTEXT_ENDPOINT, {
         headers: { Accept: "application/json" },
         cache: "no-store",
       });
+      runtime.lastRequestId = requestIdFrom(response);
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.detail ? payload.detail.message : `GET failed ${response.status}`);
       applyContext(payload);
@@ -126,6 +136,7 @@
     if (runtime.saving) return;
     runtime.saving = true;
     runtime.lastError = null;
+    runtime.lastCommand = "save_setup_context";
     refreshButtons();
     setStatus("Saving setup context...");
     try {
@@ -135,6 +146,7 @@
         cache: "no-store",
         body: JSON.stringify(collectPayload()),
       });
+      runtime.lastRequestId = requestIdFrom(response);
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.detail ? payload.detail.message : `PUT failed ${response.status}`);
       applyContext(payload);
@@ -152,6 +164,7 @@
     if (runtime.reloading) return;
     runtime.reloading = true;
     runtime.lastError = null;
+    runtime.lastCommand = "reload_setup_context";
     refreshButtons();
     setStatus("Reloading setup context...");
     try {
@@ -160,6 +173,7 @@
         headers: { Accept: "application/json" },
         cache: "no-store",
       });
+      runtime.lastRequestId = requestIdFrom(response);
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.detail ? payload.detail.message : `reload failed ${response.status}`);
       applyContext(payload);
