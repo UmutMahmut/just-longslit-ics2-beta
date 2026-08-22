@@ -8,6 +8,8 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from justls.ics.domain.detector.frame import DetectorFrameMetadata
+
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -55,6 +57,13 @@ class FrameResult:
     physical_camera_id: str | None = None
     logical_channels: tuple[str, ...] = ()
     shared_capture_id: str | None = None
+    requested_exp_time_s: float | None = None
+    actual_exp_time_s: float | None = None
+    detector_metadata: dict[str, Any] | None = None
+    quicklook_checksum: str | None = None
+    file_size_bytes: int | None = None
+    quicklook_size_bytes: int | None = None
+    fits_header_cards: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -74,6 +83,13 @@ class FrameResult:
             "physical_camera_id": self.physical_camera_id,
             "logical_channels": list(self.logical_channels),
             "shared_capture_id": self.shared_capture_id,
+            "requested_exp_time_s": self.requested_exp_time_s,
+            "actual_exp_time_s": self.actual_exp_time_s,
+            "detector_metadata": self.detector_metadata,
+            "quicklook_checksum": self.quicklook_checksum,
+            "file_size_bytes": self.file_size_bytes,
+            "quicklook_size_bytes": self.quicklook_size_bytes,
+            "fits_header_cards": self.fits_header_cards,
         }
 
 
@@ -109,6 +125,7 @@ class DataProductRef(BaseModel):
     simulated: bool = False
     media_type: str | None = None
     checksum: str | None = None
+    size_bytes: int | None = Field(default=None, ge=0)
     created_at_utc: str | None = None
     message: str | None = None
 
@@ -120,6 +137,7 @@ class DataProductRef(BaseModel):
         uri: str,
         media_type: str,
         checksum: str | None = None,
+        size_bytes: int | None = None,
         simulated: bool = False,
     ) -> "DataProductRef":
         return cls(
@@ -130,6 +148,7 @@ class DataProductRef(BaseModel):
             simulated=simulated,
             media_type=media_type,
             checksum=checksum,
+            size_bytes=size_bytes,
             created_at_utc=utc_now_iso(),
             message=(
                 "File written by the simulated camera pipeline."
@@ -215,6 +234,8 @@ class FitsHeaderSummary(BaseModel):
     exp_id: str
     frame_type: str
     exp_time_s: float
+    requested_exp_time_s: float
+    actual_exp_time_s: float | None = None
     detector_profile: str | None = None
     setup_file_stem: str | None = None
     cards: dict[str, Any] = Field(default_factory=dict)
@@ -239,27 +260,57 @@ class FitsHeaderSummary(BaseModel):
         if setup_file_stem is None and isinstance(setup_context, dict):
             setup_file_stem = setup_context.get("file_stem")
         simulated = frame_result.simulated if frame_result is not None else True
-        cards: dict[str, Any] = {
-            "OBS_ID": observation_meta.obs_id,
-            "EXP_ID": observation_meta.exp_id,
-            "FRAMETYP": observation_meta.frame_type,
-            "EXPTIME": observation_meta.exp_time_s,
-            "SAVEREQ": observation_meta.save_requested,
-            "SIMULATE": simulated,
-        }
+        requested_exp_time_s = (
+            frame_result.requested_exp_time_s
+            if frame_result is not None
+            and frame_result.requested_exp_time_s is not None
+            else observation_meta.exp_time_s
+        )
+        actual_exp_time_s = (
+            frame_result.actual_exp_time_s if frame_result is not None else None
+        )
+        cards: dict[str, Any] = (
+            dict(frame_result.fits_header_cards)
+            if frame_result is not None and frame_result.fits_header_cards
+            else {
+                "OBS_ID": observation_meta.obs_id,
+                "EXP_ID": observation_meta.exp_id,
+                "FRAMETYP": observation_meta.frame_type.upper(),
+                "EXPREQ": requested_exp_time_s,
+                "EXPTIME": (
+                    actual_exp_time_s
+                    if actual_exp_time_s is not None
+                    else requested_exp_time_s
+                ),
+                "DATE-OBS": (
+                    frame_result.started_at_utc if frame_result is not None else None
+                ),
+                "DATE-END": (
+                    frame_result.finished_at_utc if frame_result is not None else None
+                ),
+                "SAVEREQ": observation_meta.save_requested,
+                "SIMULATE": simulated,
+            }
+        )
         if frame_result is not None:
-            cards.update(
-                {
-                    "CAMERA": frame_result.physical_camera_id,
-                    "SHARED": bool(frame_result.shared_capture_id),
-                    "CHANNELS": ",".join(frame_result.logical_channels),
-                }
-            )
+            cards.setdefault("CAMERA", frame_result.physical_camera_id)
+            cards.setdefault("SHARED", bool(frame_result.shared_capture_id))
+            cards.setdefault("CHANNELS", ",".join(frame_result.logical_channels))
+            if frame_result.detector_metadata is not None:
+                detector_metadata = DetectorFrameMetadata.model_validate(
+                    frame_result.detector_metadata
+                )
+                for key, value in detector_metadata.to_fits_cards().items():
+                    if value is not None:
+                        cards.setdefault(key, value)
+        cards = {key: value for key, value in cards.items() if value is not None}
         return cls(
             obs_id=observation_meta.obs_id,
             exp_id=observation_meta.exp_id,
             frame_type=observation_meta.frame_type,
             exp_time_s=observation_meta.exp_time_s,
+            requested_exp_time_s=requested_exp_time_s,
+            actual_exp_time_s=actual_exp_time_s,
             detector_profile=detector_profile,
             setup_file_stem=setup_file_stem,
             cards=cards,
@@ -274,6 +325,8 @@ class FrameRecord(BaseModel):
     exp_id: str
     frame_type: str
     exp_time_s: float
+    requested_exp_time_s: float
+    actual_exp_time_s: float | None = None
     state: str
     frame_token: str | None = None
     kept: bool
@@ -289,6 +342,7 @@ class FrameRecord(BaseModel):
     physical_camera_id: str | None = None
     logical_channels: list[str] = Field(default_factory=list)
     shared_capture_id: str | None = None
+    detector_metadata: dict[str, Any] | None = None
 
 
 class ExposureRecord(BaseModel):
@@ -300,6 +354,8 @@ class ExposureRecord(BaseModel):
     state: str
     frame_type: str
     exp_time_s: float
+    requested_exp_time_s: float
+    actual_exp_time_s: float | None = None
     created_at_utc: str
     started_at_utc: str | None = None
     finished_at_utc: str | None = None
@@ -315,6 +371,7 @@ class ExposureRecord(BaseModel):
     physical_camera_id: str | None = None
     logical_channels: list[str] = Field(default_factory=list)
     shared_capture_id: str | None = None
+    detector_metadata: dict[str, Any] | None = None
 
     @classmethod
     def from_frame_result(
@@ -356,6 +413,7 @@ class ExposureRecord(BaseModel):
                 uri=frame_result.file_uri,
                 media_type="application/fits",
                 checksum=frame_result.checksum,
+                size_bytes=frame_result.file_size_bytes,
                 simulated=frame_result.simulated,
             )
             quicklook = (
@@ -363,6 +421,8 @@ class ExposureRecord(BaseModel):
                     kind=DataProductKind.QUICKLOOK,
                     uri=frame_result.quicklook_uri,
                     media_type="image/png",
+                    checksum=frame_result.quicklook_checksum,
+                    size_bytes=frame_result.quicklook_size_bytes,
                     simulated=frame_result.simulated,
                 )
                 if frame_result.quicklook_uri
@@ -394,6 +454,12 @@ class ExposureRecord(BaseModel):
             exp_id=observation_meta.exp_id,
             frame_type=observation_meta.frame_type,
             exp_time_s=observation_meta.exp_time_s,
+            requested_exp_time_s=(
+                frame_result.requested_exp_time_s
+                if frame_result.requested_exp_time_s is not None
+                else observation_meta.exp_time_s
+            ),
+            actual_exp_time_s=frame_result.actual_exp_time_s,
             state=state,
             frame_token=frame_result.frame_token,
             kept=frame_result.kept,
@@ -409,6 +475,7 @@ class ExposureRecord(BaseModel):
             physical_camera_id=frame_result.physical_camera_id,
             logical_channels=list(frame_result.logical_channels),
             shared_capture_id=frame_result.shared_capture_id,
+            detector_metadata=frame_result.detector_metadata,
         )
 
         return cls(
@@ -417,6 +484,12 @@ class ExposureRecord(BaseModel):
             state=state,
             frame_type=observation_meta.frame_type,
             exp_time_s=observation_meta.exp_time_s,
+            requested_exp_time_s=(
+                frame_result.requested_exp_time_s
+                if frame_result.requested_exp_time_s is not None
+                else observation_meta.exp_time_s
+            ),
+            actual_exp_time_s=frame_result.actual_exp_time_s,
             created_at_utc=observation_meta.created_at_utc,
             started_at_utc=observation_meta.started_at_utc,
             finished_at_utc=observation_meta.finished_at_utc,
@@ -432,6 +505,7 @@ class ExposureRecord(BaseModel):
             physical_camera_id=frame_result.physical_camera_id,
             logical_channels=list(frame_result.logical_channels),
             shared_capture_id=frame_result.shared_capture_id,
+            detector_metadata=frame_result.detector_metadata,
         )
 
 
@@ -552,6 +626,8 @@ class ObservationMeta:
 
 class ObservationFrameType(str, Enum):
     SCIENCE = "science"
+    BIAS = "bias"
+    DARK = "dark"
     FLAT = "flat"
     ARC = "arc"
     TEST = "test"

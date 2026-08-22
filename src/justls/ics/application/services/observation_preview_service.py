@@ -213,16 +213,22 @@ class ObservationPreviewService:
         lamp_enabled = snapshot.lamp_enabled
         mirror_inserted = snapshot.mirror_inserted
 
-        if spec.frame_type == ObservationFrameType.SCIENCE:
+        if spec.frame_type in {
+            ObservationFrameType.SCIENCE,
+            ObservationFrameType.BIAS,
+            ObservationFrameType.DARK,
+        }:
             if mode == "science" and not lamp_enabled and not mirror_inserted:
+                label = spec.frame_type.value.capitalize()
                 return ReadinessItem(
                     state=ReadinessState.READY,
-                    message="Calibration path is in science mode.",
+                    message=f"Calibration path is ready for {label} frame.",
                 )
+            label = spec.frame_type.value.capitalize()
             return ReadinessItem(
                 state=ReadinessState.BLOCKED,
                 message=(
-                    "Science frame requires science calibration mode with "
+                    f"{label} frame requires science calibration mode with "
                     "lamp disabled and mirror removed."
                 ),
             )

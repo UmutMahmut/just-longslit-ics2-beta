@@ -202,6 +202,16 @@ class DetectorSubsystem:
             physical_camera_id=result.get("physical_camera_id"),
             logical_channels=tuple(result.get("logical_channels") or ()),
             shared_capture_id=result.get("shared_capture_id"),
+            requested_exp_time_s=result.get(
+                "requested_exp_time_s",
+                self._armed.exp_time_s,
+            ),
+            actual_exp_time_s=result.get("actual_exp_time_s"),
+            detector_metadata=result.get("detector_metadata"),
+            quicklook_checksum=result.get("quicklook_checksum"),
+            file_size_bytes=result.get("file_size_bytes"),
+            quicklook_size_bytes=result.get("quicklook_size_bytes"),
+            fits_header_cards=result.get("fits_header_cards"),
         )
         result.update(
             {
@@ -245,6 +255,7 @@ class DetectorSubsystem:
             finished_at_utc=finished_at,
             result="discarded",
             save_requested=self._armed.save_requested,
+            requested_exp_time_s=self._armed.exp_time_s,
         )
 
         self._last_exposure = {

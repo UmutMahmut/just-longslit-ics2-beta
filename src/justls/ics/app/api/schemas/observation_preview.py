@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from justls.ics.domain.observation.models import ExposureSpec, ObservationRequest
 
 
-FrameTypeLiteral = Literal["science", "flat", "arc", "test"]
+FrameTypeLiteral = Literal["science", "bias", "dark", "flat", "arc", "test"]
 ReadinessStateLiteral = Literal["ready", "blocked", "unknown", "unavailable"]
 ValidationSeverityLiteral = Literal["info", "warning", "error"]
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from justls.ics.application.services.observation_preview_service import (
     ObservationPreviewService,
 )
@@ -130,6 +132,43 @@ def test_preview_blocks_science_frame_when_calibration_lamp_is_inserted() -> Non
     assert preview.readiness.calibration.state == ReadinessState.BLOCKED
     assert [issue.code for issue in preview.validation_issues] == [
         "science_calibration_not_ready"
+    ]
+
+
+@pytest.mark.parametrize("frame_type", ["bias", "dark"])
+def test_preview_allows_detector_calibration_frames_with_lamps_off(
+    frame_type: str,
+) -> None:
+    runtime = RuntimeAssembler().build()
+    service = ObservationPreviewService(runtime=runtime)
+
+    preview = service.preview_request(
+        ObservationRequest(
+            exposures=[ExposureSpec(frame_type=frame_type, exp_time_s=0.01)]
+        )
+    )
+
+    assert preview.blocked is False
+    assert preview.readiness.calibration.state == ReadinessState.READY
+
+
+@pytest.mark.parametrize("frame_type", ["bias", "dark"])
+def test_preview_blocks_detector_calibration_frames_with_lamp_inserted(
+    frame_type: str,
+) -> None:
+    runtime = RuntimeAssembler().build()
+    runtime.lamps.select_lamp("flat", enable=True)
+    service = ObservationPreviewService(runtime=runtime)
+
+    preview = service.preview_request(
+        ObservationRequest(
+            exposures=[ExposureSpec(frame_type=frame_type, exp_time_s=0.01)]
+        )
+    )
+
+    assert preview.blocked is True
+    assert [issue.code for issue in preview.validation_issues] == [
+        f"{frame_type}_calibration_not_ready"
     ]
 
 

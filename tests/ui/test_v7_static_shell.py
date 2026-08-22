@@ -126,6 +126,8 @@ def test_v7_static_observe_page_has_single_runtime_enhanceable_skeleton():
     assert 'data-bind="v7.observe.result"' in response.text
     assert 'data-role="obs-exp-time"' in response.text
     assert 'data-role="obs-frame-type"' in response.text
+    assert '<option value="bias">bias</option>' in response.text
+    assert '<option value="dark">dark</option>' in response.text
     assert 'data-role="obs-operator-note"' in response.text
     assert 'data-role="obs-abort-confirm"' in response.text
     assert 'data-action="obs-arm"' in response.text

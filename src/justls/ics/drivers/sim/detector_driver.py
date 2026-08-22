@@ -7,6 +7,7 @@ from uuid import uuid4
 
 import numpy as np
 
+from justls.ics.domain.detector.frame import DetectorFrameMetadata
 from justls.ics.drivers.sim.camera_driver import synthetic_spectrum
 from justls.ics.infra.camera_config import CameraDeviceConfig
 
@@ -18,11 +19,17 @@ def utc_now_iso() -> str:
 class SimDetectorDriver:
     """Stateful science-camera simulator with hardware-shaped lifecycle calls."""
 
-    def __init__(self, config: CameraDeviceConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: CameraDeviceConfig | None = None,
+        *,
+        role: str = "science",
+    ) -> None:
         self.config = config or CameraDeviceConfig(
             device_id="science-camera-01",
-            role="science",
+            manufacturer="SIMULATED",
         )
+        self.role = role
         self._lock = RLock()
         self._active: dict[str, Any] | None = None
         self._latest_image: np.ndarray | None = None
@@ -48,6 +55,20 @@ class SimDetectorDriver:
                 "save_requested": bool(save_requested),
                 "frame_token": f"frame-{uuid4().hex[:12]}",
                 "started_at": utc_now_iso(),
+                "detector_metadata": DetectorFrameMetadata(
+                    manufacturer="SIMULATED",
+                    model=self.config.model or "synthetic-spectrum",
+                    serial=self.config.serial,
+                    width=self.config.width,
+                    height=self.config.height,
+                    pixel_format=(
+                        "MONO8" if self.config.bit_depth <= 8 else "MONO16"
+                    ),
+                    sensor_bit_depth=self.config.bit_depth,
+                    bin_x=1,
+                    bin_y=1,
+                    gain=self.config.gain,
+                ).model_dump(mode="json"),
             }
             return dict(self._active)
 
@@ -62,15 +83,22 @@ class SimDetectorDriver:
             if self._active is None:
                 raise RuntimeError("science camera has no active exposure")
             active = self._active
+            finished_at = datetime.now(timezone.utc)
+            started_at = datetime.fromisoformat(active["started_at"])
+            actual_exp_time_s = max(
+                0.0,
+                (finished_at - started_at).total_seconds(),
+            )
             image = synthetic_spectrum(
                 width=self.config.width,
                 height=self.config.height,
                 seed_text=active["frame_token"],
             )
-            finished_at = utc_now_iso()
             result = {
                 **active,
-                "finished_at": finished_at,
+                "finished_at": finished_at.isoformat(),
+                "requested_exp_time_s": active["exp_time_s"],
+                "actual_exp_time_s": actual_exp_time_s,
                 "result": "completed",
                 "early_stop": early_stop,
                 "physical_camera_id": self.config.device_id,
@@ -103,7 +131,7 @@ class SimDetectorDriver:
         with self._lock:
             return {
                 "device_id": self.config.device_id,
-                "role": self.config.role,
+                "role": self.role,
                 "driver": self.config.driver,
                 "model": self.config.model,
                 "serial": self.config.serial,

@@ -11,23 +11,20 @@ from justls.ics.drivers.sim.lamp_driver import (
 )
 from justls.ics.drivers.sim.slit_driver import SimSlitDriver
 
+from .detector_contract import (
+    assert_detector_abort_contract,
+    assert_detector_exposure_contract,
+)
+
 
 def test_sim_detector_adapter_exposure_contract() -> None:
     adapter = SimDetectorAdapter(SimDetectorDriver())
+    assert_detector_exposure_contract(adapter)
 
-    result = adapter.acquire_exposure(
-        obs_id="obs-contract",
-        exp_time_s=12.5,
-        frame_type="science",
-    )
 
-    assert result["obs_id"] == "obs-contract"
-    assert result["frame_type"] == "science"
-    assert result["exp_time_s"] == 12.5
-    assert result["frame_token"].startswith("frame-")
-    assert result["result"] == "completed"
-    assert "started_at" in result
-    assert "finished_at" in result
+def test_sim_detector_adapter_abort_contract() -> None:
+    adapter = SimDetectorAdapter(SimDetectorDriver())
+    assert_detector_abort_contract(adapter)
 
 
 def test_sim_slit_adapter_position_contract() -> None:
@@ -58,4 +55,3 @@ def test_sim_calibration_adapter_state_contract() -> None:
     assert adapter.get_active_lamp() is None
     assert adapter.is_lamp_enabled() is False
     assert adapter.is_mirror_inserted() is False
-

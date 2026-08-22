@@ -462,7 +462,7 @@
                         <button class="btn" type="button" data-action="instrument-refresh-calibration" disabled>Refresh</button>
                       </div>
                       <p style="margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45;">
-                        Mode/Lamp must match the intended frame type. Science frames require science mode and lamps off; flat frames require calibration mode with the flat lamp; arc frames require calibration mode with an Hg(Ar) or Ne arc lamp. Dark/bias are future detector-only frames and keep lamps off.
+                        Mode/Lamp must match the intended frame type. Science, Bias, and Dark frames require science mode and lamps off; flat frames require calibration mode with the flat lamp; arc frames require calibration mode with an Hg(Ar) or Ne arc lamp.
                       </p>
                       <dl class="kv compact-kv" style="margin-top: 8px;">
                         <dt>Mode</dt><dd><code data-bind="v7.instrument.calibration.mode">science</code></dd>
@@ -627,7 +627,7 @@
                   <h3>Single Exposure</h3>
                   <div class="field-grid">
                     <label>Exposure Time (s)<input type="number" min="0.001" step="0.001" value="30" data-role="obs-exp-time" /></label>
-                    <label>Frame Type<select data-role="obs-frame-type"><option value="science">science</option><option value="flat">flat</option><option value="arc">arc</option><option value="test">test</option></select></label>
+                    <label>Frame Type<select data-role="obs-frame-type"><option value="science">science</option><option value="bias">bias</option><option value="dark">dark</option><option value="flat">flat</option><option value="arc">arc</option><option value="test">test</option></select></label>
                     <label style="grid-column: 1 / -1;">Operator Note<textarea data-role="obs-operator-note" placeholder="Optional note"></textarea></label>
                   </div>
                   <div class="badge-row" style="margin-top: 8px;">

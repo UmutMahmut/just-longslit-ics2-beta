@@ -1,31 +1,46 @@
 {
+  "schema_version": 2,
   "profile_name": "campus-beta-sim",
+  "detector_profile_name": "campus-beta-shared-camera",
   "data_root": "var/data",
-  "logical_science_channels": ["B", "G", "R"],
-  "science_camera": {
-    "device_id": "science-camera-01",
-    "role": "science",
-    "driver": "simulated",
-    "manufacturer": "ZWO",
-    "model": null,
-    "serial": null,
-    "width": 640,
-    "height": 480,
-    "bit_depth": 16,
-    "gain": 100,
-    "preview_exposure_ms": 500
-  },
-  "slit_camera": {
-    "device_id": "slit-camera-01",
-    "role": "slit",
-    "driver": "simulated",
-    "manufacturer": "ZWO",
-    "model": null,
-    "serial": null,
-    "width": 640,
-    "height": 480,
-    "bit_depth": 8,
-    "gain": 100,
-    "preview_exposure_ms": 100
-  }
+  "devices": [
+    {
+      "device_id": "science-camera-01",
+      "driver": "simulated",
+      "manufacturer": "SIMULATED",
+      "model": null,
+      "serial": null,
+      "width": 640,
+      "height": 480,
+      "bit_depth": 16,
+      "gain": 100,
+      "preview_exposure_ms": 500
+    },
+    {
+      "device_id": "slit-camera-01",
+      "driver": "simulated",
+      "manufacturer": "SIMULATED",
+      "model": null,
+      "serial": null,
+      "width": 640,
+      "height": 480,
+      "bit_depth": 8,
+      "gain": 100,
+      "preview_exposure_ms": 100
+    }
+  ],
+  "role_bindings": [
+    {
+      "role": "science",
+      "device_id": "science-camera-01",
+      "logical_channels": ["B", "G", "R"],
+      "shared_capture": true
+    },
+    {
+      "role": "slit",
+      "device_id": "slit-camera-01",
+      "logical_channels": [],
+      "shared_capture": false
+    }
+  ]
 }

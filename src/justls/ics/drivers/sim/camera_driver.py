@@ -19,8 +19,9 @@ def utc_now_iso() -> str:
 class SimPreviewCameraDriver:
     """Continuous-preview simulator used for the slit/guide camera role."""
 
-    def __init__(self, config: CameraDeviceConfig) -> None:
+    def __init__(self, config: CameraDeviceConfig, *, role: str = "slit") -> None:
         self.config = config
+        self.role = role
         self._lock = RLock()
         self._sequence = 0
         self._preview_enabled = True
@@ -70,7 +71,7 @@ class SimPreviewCameraDriver:
         captured_at = utc_now_iso()
         return output.getvalue(), {
             "device_id": self.config.device_id,
-            "role": self.config.role,
+            "role": self.role,
             "driver": self.config.driver,
             "sequence": sequence,
             "captured_at": captured_at,
@@ -83,7 +84,7 @@ class SimPreviewCameraDriver:
         with self._lock:
             return {
                 "device_id": self.config.device_id,
-                "role": self.config.role,
+                "role": self.role,
                 "driver": self.config.driver,
                 "model": self.config.model,
                 "serial": self.config.serial,

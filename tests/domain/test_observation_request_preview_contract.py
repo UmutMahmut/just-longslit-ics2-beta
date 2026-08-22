@@ -14,7 +14,10 @@ from justls.ics.domain.observation.models import (
 )
 
 
-@pytest.mark.parametrize("frame_type", ["science", "flat", "arc", "test"])
+@pytest.mark.parametrize(
+    "frame_type",
+    ["science", "bias", "dark", "flat", "arc", "test"],
+)
 def test_exposure_spec_accepts_execution_compatible_frame_types(frame_type: str) -> None:
     spec = ExposureSpec(frame_type=frame_type, exp_time_s=30.0)
 
@@ -24,7 +27,7 @@ def test_exposure_spec_accepts_execution_compatible_frame_types(frame_type: str)
 
 def test_exposure_spec_rejects_unknown_frame_type() -> None:
     with pytest.raises(ValidationError):
-        ExposureSpec(frame_type="bias", exp_time_s=30.0)
+        ExposureSpec(frame_type="unknown", exp_time_s=30.0)
 
 
 def test_observation_request_accepts_single_exposure_baseline() -> None:

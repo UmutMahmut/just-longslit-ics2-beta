@@ -130,7 +130,11 @@ class Runtime:
                     if self.camera_config
                     else []
                 ),
-                "shared_capture": True,
+                "shared_capture": (
+                    self.camera_config.science_binding.shared_capture
+                    if self.camera_config
+                    else False
+                ),
             },
         }
 
@@ -349,7 +353,13 @@ class RuntimeAssembler:
             camera_config_path=str(camera_config_path),
             data_root=str(data_root),
             detector_config=build_beta_detector_config(
-                camera_config.science_camera.device_id
+                camera_config.science_camera.device_id,
+                logical_channels=tuple(camera_config.logical_science_channels),
+                profile_name=(
+                    camera_config.detector_profile_name
+                    or camera_config.profile_name
+                ),
+                shared_physical_camera=camera_config.science_binding.shared_capture,
             ),
         )
 
@@ -423,12 +433,15 @@ class RuntimeAssembler:
 
     def _build_slit_camera(self) -> SimPreviewCameraAdapter | None:
         if self.config.run_mode == RunMode.SIM:
-            if self._camera_config.slit_camera.driver != "simulated":
+            slit_camera = self._camera_config.slit_camera
+            if slit_camera is None:
+                return None
+            if slit_camera.driver != "simulated":
                 raise NotImplementedError(
                     "The selected slit-camera profile requires a ZWO driver; "
                     "use cameras.sim.json until that driver is implemented."
                 )
-            driver = SimPreviewCameraDriver(self._camera_config.slit_camera)
+            driver = SimPreviewCameraDriver(slit_camera)
             return SimPreviewCameraAdapter(driver)
         raise NotImplementedError("HW slit camera adapter is not implemented yet.")
 

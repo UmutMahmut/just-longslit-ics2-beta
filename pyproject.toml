@@ -24,6 +24,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+  "astropy>=6,<8",
   "pytest>=8,<9",
   "httpx>=0.27,<1",
   "uvicorn[standard]>=0.29,<1",

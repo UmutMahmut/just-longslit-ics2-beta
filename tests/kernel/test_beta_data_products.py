@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+from astropy.io import fits
+
 from justls.ics.kernel.runtime import RuntimeAssembler
 
 
@@ -33,6 +35,24 @@ def test_completed_exposure_writes_valid_fits_blocks_and_quicklook() -> None:
     assert quicklook_path.exists()
     assert quicklook_path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
     assert len(record["primary_data_product"]["checksum"]) == 64
+    assert record["primary_data_product"]["size_bytes"] == fits_path.stat().st_size
+    assert record["quicklook"]["size_bytes"] == quicklook_path.stat().st_size
+    assert record["requested_exp_time_s"] == 2.5
+    assert record["actual_exp_time_s"] >= 0
+    assert record["fits_header"]["requested_exp_time_s"] == 2.5
+    assert record["fits_header"]["actual_exp_time_s"] == record["actual_exp_time_s"]
+
+    with fits.open(fits_path, uint=True) as hdus:
+        hdus.verify("exception")
+        header = hdus[0].header
+        assert header["EXPREQ"] == record["requested_exp_time_s"]
+        assert header["EXPTIME"] == record["actual_exp_time_s"]
+        assert header["FRAMETYP"] == "SCIENCE"
+        assert header["COLORTYP"] == "MONO16"
+        assert header["SIMULATE"] is True
+        assert hdus[0].data.dtype.name == "uint16"
+        for key, value in record["fits_header"]["cards"].items():
+            assert header[key] == value
 
 
 def test_completed_unsaved_exposure_stays_in_memory_without_files() -> None:

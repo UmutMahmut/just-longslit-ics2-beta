@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Protocol
 
 from justls.ics.drivers.sim.detector_driver import SimDetectorDriver
 from justls.ics.infra.data_products import (
@@ -38,17 +38,33 @@ class BaseDetectorAdapter(ABC):
     def get_latest_preview(self) -> tuple[bytes, dict[str, Any]]: ...
 
 
-class SimDetectorAdapter(BaseDetectorAdapter):
+class DetectorDriver(Protocol):
+    def start_exposure(self, **kwargs: Any) -> dict[str, Any]: ...
+
+    def finish_exposure(self) -> dict[str, Any]: ...
+
+    def stop_exposure_and_readout(self) -> dict[str, Any]: ...
+
+    def abort_exposure(self) -> dict[str, Any]: ...
+
+    def get_status(self) -> dict[str, Any]: ...
+
+    def get_latest_image(self) -> Any: ...
+
+
+class DetectorAdapter(BaseDetectorAdapter):
     def __init__(
         self,
-        driver: SimDetectorDriver,
+        driver: DetectorDriver,
         *,
         writer: LocalDataProductWriter | None = None,
         logical_channels: tuple[str, ...] = ("B", "G", "R"),
+        simulated: bool = False,
     ) -> None:
         self.driver = driver
         self.writer = writer
         self.logical_channels = logical_channels
+        self.simulated = simulated
         self._latest_preview: bytes | None = None
 
     def start_exposure(
@@ -79,7 +95,7 @@ class SimDetectorAdapter(BaseDetectorAdapter):
         self._latest_preview = render_quicklook_png(image)
         result["logical_channels"] = list(self.logical_channels)
         result["shared_capture_id"] = result["frame_token"]
-        result["simulated"] = True
+        result["simulated"] = self.simulated
 
         if result["save_requested"] and self.writer is not None:
             products = self.writer.write(
@@ -89,10 +105,13 @@ class SimDetectorAdapter(BaseDetectorAdapter):
                 frame_token=result["frame_token"],
                 frame_type=result["frame_type"],
                 exp_time_s=result["exp_time_s"],
+                actual_exp_time_s=result.get("actual_exp_time_s"),
                 camera_id=result["physical_camera_id"],
                 logical_channels=self.logical_channels,
                 started_at=result["started_at"],
                 finished_at=result["finished_at"],
+                detector_metadata=result.get("detector_metadata"),
+                simulated=self.simulated,
             )
             result.update(products.to_result_fragment())
         return result
@@ -103,7 +122,7 @@ class SimDetectorAdapter(BaseDetectorAdapter):
     def get_status(self) -> dict[str, Any]:
         status = self.driver.get_status()
         status["logical_channels"] = list(self.logical_channels)
-        status["shared_across_logical_channels"] = True
+        status["shared_across_logical_channels"] = len(self.logical_channels) > 1
         return status
 
     def get_latest_preview(self) -> tuple[bytes, dict[str, Any]]:
@@ -129,3 +148,19 @@ class SimDetectorAdapter(BaseDetectorAdapter):
             save_requested=save_requested,
         )
         return self._complete(result)
+
+
+class SimDetectorAdapter(DetectorAdapter):
+    def __init__(
+        self,
+        driver: SimDetectorDriver,
+        *,
+        writer: LocalDataProductWriter | None = None,
+        logical_channels: tuple[str, ...] = ("B", "G", "R"),
+    ) -> None:
+        super().__init__(
+            driver,
+            writer=writer,
+            logical_channels=logical_channels,
+            simulated=True,
+        )

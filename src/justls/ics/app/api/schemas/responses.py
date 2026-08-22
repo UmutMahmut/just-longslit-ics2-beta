@@ -130,6 +130,7 @@ class DataProductRefResponse(BaseModel):
     simulated: bool
     media_type: str | None = None
     checksum: str | None = None
+    size_bytes: int | None = None
     created_at_utc: str | None = None
     message: str | None = None
 
@@ -141,6 +142,8 @@ class FitsHeaderSummaryResponse(BaseModel):
     exp_id: str
     frame_type: str
     exp_time_s: float
+    requested_exp_time_s: float
+    actual_exp_time_s: float | None = None
     detector_profile: str | None = None
     setup_file_stem: str | None = None
     cards: dict[str, Any] = Field(default_factory=dict)
@@ -154,6 +157,8 @@ class FrameRecordResponse(BaseModel):
     exp_id: str
     frame_type: str
     exp_time_s: float
+    requested_exp_time_s: float
+    actual_exp_time_s: float | None = None
     state: str
     frame_token: str | None = None
     kept: bool
@@ -169,6 +174,7 @@ class FrameRecordResponse(BaseModel):
     physical_camera_id: str | None = None
     logical_channels: list[str] = Field(default_factory=list)
     shared_capture_id: str | None = None
+    detector_metadata: dict[str, Any] | None = None
 
 
 class ExposureRecordResponse(BaseModel):
@@ -180,6 +186,8 @@ class ExposureRecordResponse(BaseModel):
     state: str
     frame_type: str
     exp_time_s: float
+    requested_exp_time_s: float
+    actual_exp_time_s: float | None = None
     created_at_utc: str
     started_at_utc: str | None = None
     finished_at_utc: str | None = None
@@ -195,6 +203,7 @@ class ExposureRecordResponse(BaseModel):
     physical_camera_id: str | None = None
     logical_channels: list[str] = Field(default_factory=list)
     shared_capture_id: str | None = None
+    detector_metadata: dict[str, Any] | None = None
 
 
 class ObservationMetaResponse(BaseModel):

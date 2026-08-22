@@ -1,31 +1,46 @@
 {
-  "profile_name": "campus-beta-zwo-template",
+  "schema_version": 2,
+  "profile_name": "generic-zwo-template",
+  "detector_profile_name": "generic-long-slit-detector",
   "data_root": "var/data",
-  "logical_science_channels": ["B", "G", "R"],
-  "science_camera": {
-    "device_id": "science-camera-01",
-    "role": "science",
-    "driver": "zwo",
-    "manufacturer": "ZWO",
-    "model": "REPLACE_WHEN_KNOWN",
-    "serial": "REPLACE_WHEN_KNOWN",
-    "width": 640,
-    "height": 480,
-    "bit_depth": 16,
-    "gain": 100,
-    "preview_exposure_ms": 500
-  },
-  "slit_camera": {
-    "device_id": "slit-camera-01",
-    "role": "slit",
-    "driver": "zwo",
-    "manufacturer": "ZWO",
-    "model": "REPLACE_WHEN_KNOWN",
-    "serial": "REPLACE_WHEN_KNOWN",
-    "width": 640,
-    "height": 480,
-    "bit_depth": 8,
-    "gain": 100,
-    "preview_exposure_ms": 100
-  }
+  "devices": [
+    {
+      "device_id": "science-camera-01",
+      "driver": "zwo",
+      "manufacturer": "ZWO",
+      "model": "REPLACE_WHEN_KNOWN",
+      "serial": "REPLACE_WHEN_KNOWN",
+      "width": 640,
+      "height": 480,
+      "bit_depth": 16,
+      "gain": 100,
+      "preview_exposure_ms": 500
+    },
+    {
+      "device_id": "slit-camera-01",
+      "driver": "zwo",
+      "manufacturer": "REPLACE_WHEN_KNOWN",
+      "model": "REPLACE_WHEN_KNOWN",
+      "serial": "REPLACE_WHEN_KNOWN",
+      "width": 640,
+      "height": 480,
+      "bit_depth": 8,
+      "gain": 100,
+      "preview_exposure_ms": 100
+    }
+  ],
+  "role_bindings": [
+    {
+      "role": "science",
+      "device_id": "science-camera-01",
+      "logical_channels": ["SCI"],
+      "shared_capture": false
+    },
+    {
+      "role": "slit",
+      "device_id": "slit-camera-01",
+      "logical_channels": [],
+      "shared_capture": false
+    }
+  ]
 }

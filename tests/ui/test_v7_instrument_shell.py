@@ -19,7 +19,7 @@ def test_v7_static_shell_contains_instrument_configure_page():
     assert 'data-role="instrument-slit-controls"' in html
     assert 'data-role="instrument-calibration-controls"' in html
     assert "Mode/Lamp must match the intended frame type" in html
-    assert "Science frames require science mode and lamps off" in html
+    assert "Science, Bias, and Dark frames require science mode and lamps off" in html
     assert "flat frames require calibration mode with the flat lamp" in html
     assert "arc frames require calibration mode with an Hg(Ar) or Ne arc lamp" in html
     assert 'data-action="instrument-use-calibration-frame-defaults"' in html

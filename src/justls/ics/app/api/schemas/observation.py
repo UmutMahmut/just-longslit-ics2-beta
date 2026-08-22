@@ -13,7 +13,7 @@ class ObservationArmReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     exp_time_s: float = Field(..., gt=0)
-    frame_type: Literal["science", "flat", "arc", "test"] = "science"
+    frame_type: Literal["science", "bias", "dark", "flat", "arc", "test"] = "science"
     operator_note: str | None = None
     save_requested: bool = False
 
