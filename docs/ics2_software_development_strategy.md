@@ -1,8 +1,8 @@
 # ICS Beta Software Development Strategy
 
 ```text
-Scope: campus-integration strategy for C:\Users\UmutMahmut\ICS_beta only
-Status: after Phase 3.0-B Lite and camera-role/acquisition-workspace transition
+Scope: campus-integration strategy for this ICS Beta repository
+Status: Phase 3.1 closed; Phase 3.2 managed hardware-runtime integration active
 ```
 
 ## Mission
@@ -126,6 +126,42 @@ Driver
 
 No layer should compensate for a missing contract by leaking implementation detail upward.
 
+## Deployment topology and role binding
+
+ICS 2.0 is intended to be a general long-slit control platform. A physical
+device definition must therefore be separate from the operational role assigned
+to that device at a particular site.
+
+The generic model should distinguish:
+
+```text
+physical device
+  stable identity, manufacturer/model/serial, driver, connection, capabilities
+
+deployment binding
+  science detector, slit viewer, guide sensor, calibration unit, focal station
+
+instrument profile
+  logical science channels, slit model, calibration sources, optical metadata
+
+telescope/site profile
+  focal stations, plate scale, readiness context, external control boundaries
+```
+
+A device may support several capabilities, but incompatible roles must not be
+owned concurrently without an explicit arbitration contract. The science
+detector lifecycle, continuous preview lifecycle, guide-measurement pipeline,
+and telescope guide-command authority remain separate concepts even when one
+camera can technically participate in more than one of them.
+
+Camera schema v2 now implements a physical device registry plus deployment role
+bindings. It supports generic logical channel names, a required science role,
+an optional slit role, a single-channel `SCI` profile, and in-memory migration
+of the legacy schema. The default Beta profile still binds one shared simulated
+camera to B/G/R so existing behavior is unchanged. Device definitions contain
+no operational `role`; the Lhires/ASI294 profile is a separate non-default
+deployment artifact.
+
 ## Current contract baseline
 
 The current baseline after Phase 2.9-E includes:
@@ -222,7 +258,7 @@ responsibility:
 
 ```text
 Phase 3.1  Science FITS contract closure
-Phase 3.2  Real-camera adapter and hardware-fact readiness
+Phase 3.2  Deployment topology/schema v2 plus real-camera and hardware-fact readiness
 Phase 4.0  First single-science-camera acquisition through ICS Beta
 Phase 4.1  Stable operator-driven Science/Bias/Dark/Flat/Arc acquisition
 Phase 4.2  Science camera + slit/guide camera + required instrument-state integration
@@ -246,8 +282,20 @@ science panes. The beta bridge mirrors one shared science-camera readout into
 those stable logical channels and labels that fact; the structure remains ready
 for three independent science cameras.
 
-This UI and routing seam does not replace the next mainline boundary: Phase 3.1
-still closes the science-FITS data contract before real-camera integration.
+That B/G/R presentation is the current JUST/Beta compatibility topology, not a
+universal UI requirement. A profile-driven operator console must also support a
+single-channel long-slit instrument without inventing B/G/R channels. The
+campus Lhires profile is the first concrete test of this boundary.
+
+Phase 3.1 is now closed: FITS uses a standards-readable unsigned-16 contract,
+atomic no-overwrite publication, requested/actual timing, stable frame types,
+detector/CFA/cooling metadata, checksums, sizes, and independent Astropy
+validation. Phase 3.2-A schema v2 and Phase 3.2-B standalone ZWO hardware spike
+are also complete. The active Phase 3.2-C boundary is managed Runtime/API
+ownership of camera startup, serial binding, exposure, cooling, telemetry
+validity, abort, shutdown, and reconnect. The standalone hardware path is proof
+of the adapter and data-product chain; it does not by itself close Phase 4.0's
+operator/API acceptance loop.
 
 Unattended multi-step auto-advance is not on the Phase 4.2 critical path.
 Single-exposure completion ownership may be added with the real-camera
@@ -292,12 +340,68 @@ Current software design must respect these facts:
 
 - JUST long-slit is a B/G/R three-channel spectrograph, not a Blue/Red two-channel instrument.
 - Slit width must preserve both operator angular units and backend mechanical units.
-- Current slit conversion: `1 arcsec = 128.34 um`.
+- The current `1 arcsec = 128.34 um` conversion is specific to the JUST optical
+  train and must not be promoted into the generic core.
 - Calibration involves mode/path/source/lamp/frame-type compatibility, not only lamp on/off.
 - Slit monitor / guider should remain a first-class visible concept.
 - TCS context is part of readiness, but early integration should be read-only.
 - Real hardware protocol choices are not yet software-roadmap commitments.
 - Bottom-layer integration remains hardware-selection-driven.
+
+### Campus integration profile
+
+The identified campus platform is a 50 cm dual-Nasmyth telescope with a Lhires
+III at one focal station. The provisional preferred binding assigns a ZWO
+ASI294MC Pro to science/engineering acquisition and a compact monochrome camera
+to the Lhires reflective-slit guide port. These are deployment choices and do
+not become ICS 2.0 defaults.
+
+Relevant instrument facts to verify against the exact hardware unit before
+coding include:
+
+- Lhires is nominally an f/10 instrument and uses discrete slit apertures rather
+  than the current JUST continuous slit conversion;
+- its acquisition and guide ports have different mechanical interfaces and
+  backfocus requirements;
+- its science topology is one tunable spectrum channel rather than B/G/R;
+- calibration lamp and grating control may be manual or version-dependent and
+  must be reported honestly until a real command interface is verified;
+- a second Nasmyth camera is a separate focal-station resource and does not
+  substitute for common-path slit guiding.
+
+If the 50 cm focus is actually f/10, the plate scale is approximately
+41.25 arcsec/mm and a 23 um slit projects to approximately 0.95 arcsec. This is
+an engineering estimate only; readiness and UI values must use the measured
+site optical configuration.
+
+The ASI294MC Pro is a cooled color detector. It is suitable for engineering
+first light and may support limited science validation, but the primary FITS
+must preserve the un-debayered raw mosaic with pixel-format/CFA, gain, offset,
+ROI, binning, requested/actual timing, and cooling metadata. Debayering may be
+used for a labeled quicklook, not as an unrecorded mutation of primary data.
+
+The 2026-08-22 hardware spike verified that the generic detector adapter can
+load the vendor SDK directly, bind the detected serial, enumerate controls,
+write and restore cooler state, acquire full-frame RAW16, and publish an ICS
+FITS plus quicklook with `SIMULATE=false`. This does not make ASI294MC Pro a
+default or introduce ASIStudio as a dependency. The durable architecture stays:
+
+```text
+generic detector/cooling contract
+  -> deployment role binding
+  -> ZWO adapter/driver
+  -> ASICamera2 SDK and installed device driver
+```
+
+The next architectural gate is lifecycle ownership by Runtime/Application and
+vendor-neutral API exposure. Machine-local SDK paths belong in deployment
+configuration or environment, not generic profiles shipped as defaults.
+
+Reference hardware documents:
+
+- [Shelyak Lhires III product and interface specifications](https://www.shelyak.com/produit/spectroscope-lhires-iii/?lang=en)
+- [Shelyak Lhires III guiding and calibration upgrade guide](https://www.shelyak.com/wp-content/uploads/DC0026C-Guide-Utilisateur-Kit-Lhires-III-EN.pdf)
+- [ZWO ASI294 camera manual](https://astronomy-imaging-camera.com/manuals/ASI294_Manual_EN_V2.0.pdf)
 
 ## Documentation policy
 

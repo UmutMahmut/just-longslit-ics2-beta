@@ -85,7 +85,8 @@ Responsibility:
 - routine slit configuration;
 - routine calibration configuration;
 - detector profile visibility;
-- B/G/R channel summary;
+- instrument-profile-specific science-channel summary; currently B/G/R for the
+  JUST compatibility profile;
 - safe frame-type advisory context.
 
 Instrument / Configure may expose operator controls only when backend/API contracts and guard behavior are clear.
@@ -103,7 +104,10 @@ Responsibility:
 - clear notice that the current baseline requires explicit Finish or Stop & Readout after Start;
 - command feedback summary;
 - latest exposure record and data-product reference summary;
-- three B/G/R science image panes showing the latest completed acquisition; during beta all three are explicitly marked as one shared science-camera source, with no separate science Preview mode;
+- science panes derived from the active instrument profile; the current JUST
+  compatibility profile shows three B/G/R panes and explicitly marks that all
+  three mirror one shared science-camera source, while a campus Lhires profile
+  shows one spectrum channel;
 - multi-exposure plan entry, preview, load, progress, pause/resume, and abort controls.
 - durable sequence save/restore visibility and explicit Retry Current Step / Mark Failed recovery actions.
 - independent slit/guide continuous Preview, default on, stoppable, and never persisted.
@@ -209,6 +213,28 @@ Preview must not automatically disable Arm. Arm always reruns the backend readin
 
 ## Hardware facts the UI must preserve
 
+### Instrument-profile-driven topology
+
+The current v7 B/G/R layout is a valid JUST compatibility topology, not a
+universal long-slit layout. The operator console must eventually render logical
+science channels from the active instrument profile while keeping stable
+science acquisition semantics. It must not invent missing channels to make a
+single-channel instrument fit the JUST display.
+
+The active profile and deployment binding must be visible in Setup,
+Instrument/Configure, Observe, and Diagnostics. At minimum, the operator should
+be able to identify:
+
+```text
+instrument profile
+telescope/site profile
+active focal station
+physical device ID/model/serial
+bound runtime role
+logical science channel(s)
+driver and simulated/real/unavailable state
+```
+
 ### B/G/R channels
 
 JUST is a B/G/R three-channel spectrograph.
@@ -233,7 +259,7 @@ Until real B/G/R hardware contracts exist:
 
 ### Slit width
 
-Current slit-width contract:
+Current JUST slit-width contract:
 
 ```text
 operator unit: arcsec
@@ -251,6 +277,55 @@ Common shortcuts:
 ```
 
 Do not use `0.1 arcsec` as a common routine shortcut.
+
+The conversion above is JUST-specific. A generic slit contract must support
+both continuous slit mechanisms and indexed/discrete slit sets. It must derive
+angular projection from the active telescope/instrument optical profile rather
+than from a global constant.
+
+### Campus Lhires III test profile
+
+The identified campus test platform is a 50 cm dual-Nasmyth telescope with a
+Lhires III at one focal station. This profile is for integration and validation;
+it is not an ICS 2.0 default configuration.
+
+The preferred provisional two-camera presentation is:
+
+```text
+science acquisition  -> ZWO ASI294MC Pro on the Lhires acquisition port
+slit preview/guide    -> compact monochrome camera on the reflective-slit guide port
+```
+
+ASI294MC Pro may be shown as a temporary guide-camera binding during an
+engineering test, but the UI must not imply that this is the recommended final
+assignment. If another cooled monochrome science camera becomes available, the
+deployment binding may change without changing generic observation contracts.
+
+The Lhires profile must show one logical spectrum channel, its discrete slit
+selection, grating/central-wavelength context, and calibration source state.
+Manual settings must be entered and recorded as operator-confirmed snapshots;
+they must not appear as remotely controlled telemetry. A camera on the second
+Nasmyth focal station is a separate instrument resource and cannot be presented
+as the Lhires common-path slit guider.
+
+For an ASI294 science binding:
+
+- primary data remains an un-debayered raw detector frame;
+- CFA/pixel format, ROI, binning, gain, offset, detector temperature, cooler
+  state, requested exposure, and actual timing are visible in Diagnostics and
+  recorded in the FITS/ExposureRecord contract;
+- cooler UI is capability-driven and vendor-neutral: show cooler enabled,
+  target temperature, detector temperature, and power percentage when the
+  adapter reports them. Do not invent a separate fan switch when the camera
+  exposes no writable fan control; the verified ASI294MC Pro SDK controls are
+  Target Temperature and Cooler On;
+- temperature immediately after camera initialization is settling telemetry,
+  not instantly authoritative. Show an initializing/stale indicator until the
+  adapter's validity rule is satisfied rather than displaying the first value
+  as stable;
+- any debayered or stretched image is labeled as a quicklook;
+- science readiness remains provisional until Bias/Dark/Flat/Arc/Science
+  acquisition and calibration behavior have been verified on hardware.
 
 ### Calibration
 
@@ -278,6 +353,17 @@ Blocking validation belongs to backend preview/gate contracts, not frontend-only
 Slit monitor is a first-class, preview-only subsystem concept. It has independent
 start, stop, status, and latest-frame contracts, remains active during science
 acquisition, and does not expose single-frame save or data-product controls.
+
+The future guiding stack must keep three responsibilities separate:
+
+```text
+slit viewer       -> continuous frames and camera status
+guide measurement -> star/slit centroid, error vector, SNR, saturation, lost state
+guide controller  -> authorized correction requests to a guider/TCS adapter
+```
+
+Adding guide measurements does not grant telescope write authority. Closed-loop
+corrections require a formal guider/TCS ownership and safety contract.
 
 ### OCS/TCS and observatory context
 

@@ -9,13 +9,16 @@ spectrograph.
 
 ## Current baseline
 
-Current code baseline: simulator-backed science acquisition, independent slit/guide live preview, durable operator-stepped sequence state, and conservative restart recovery.
+Current code baseline: simulator-backed operator workflows, closed science-FITS
+contract, schema-v2 device/role topology, durable operator-stepped sequence
+state, conservative restart recovery, and a standalone hardware-verified ZWO
+RAW16 detector path awaiting managed Runtime/API ownership.
 
 Validation baseline:
 
 ```text
-pytest -q
-292 passed
+pytest -q --basetemp .pytest-tmp
+322 passed
 ```
 
 Current default UI behavior:
@@ -88,9 +91,17 @@ Implemented capabilities include:
 - Three persistent B/G/R science display panes and stable logical-channel image endpoints; the beta bridge marks their currently shared science-camera source instead of hiding the final instrument topology.
 - Independent simulated slit/guide-camera live preview with explicit start/stop state; it never writes data products and remains available during science acquisition.
 - Actual local FITS files and PNG quicklooks in simulation mode when persistence is requested.
+- Standards-readable unsigned-16 FITS with atomic no-overwrite publication,
+  stable frame types, requested/actual timing, detector/CFA/cooling metadata,
+  checksums, sizes, and independent Astropy validation.
 - ExposureRecord provenance for the physical camera, logical channels, shared
   capture ID, checksum, and file URI.
-- Replaceable camera profiles under `config/`.
+- Camera schema v2 profiles under `config/`, with physical devices separated
+  from deployment role bindings, legacy v1 migration, generic logical channel
+  names, and an optional slit camera.
+- Standalone ZWO SDK discovery/control/cooling and full-frame RAW16 acquisition
+  through the normal ICS adapter and FITS/quicklook writer; the 2026-08-22
+  ASI294MC Pro hardware smoke test passed without ASIImg/ASICap at runtime.
 - Read-only `/api/v1/observatory/context` for OCS/TCS/telescope/dome/weather/guider visibility with unavailable/stale-ready semantics reserved.
 - `/api/v1/status/full` includes observatory context and latest exposure-record visibility.
 - Simulator adapter contract tests for detector, slit, and calibration behavior.
@@ -108,7 +119,8 @@ The repository intentionally does not yet implement:
 - TCS telescope control;
 - real TCS readiness integration;
 - telescope pointing, rotator, guider, dome, weather, or safety authority;
-- ZWO SDK hardware driver;
+- managed Runtime/FastAPI lifecycle and API exposure for the proven standalone
+  ZWO detector driver;
 - independent physical B/G/R cameras (the beta bridge intentionally shares one);
 - closed-loop guiding;
 - role-based authentication and operator/engineer permission separation;
@@ -155,18 +167,34 @@ The default profile is:
 config/cameras.sim.json
 ```
 
-It deliberately leaves both ZWO model and serial fields unset. Override it with:
+It is a schema-v2 simulated B/G/R compatibility profile. Override it with:
 
 ```powershell
 $env:ICS_BETA_CAMERA_CONFIG="C:\path\to\camera-profile.json"
 $env:ICS_BETA_DATA_ROOT="D:\observations\ics-beta"
 ```
 
-`config/cameras.zwo.example.json` documents the fields to replace after the
-hardware is known. Selecting `driver: "zwo"` currently fails clearly at startup;
-it will only be activated after the SDK-specific driver and hardware-in-loop
-tests exist. Changing model, serial, dimensions, bit depth, gain, or preview
-exposure does not require UI changes.
+`config/cameras.zwo.example.json` is a generic vendor template.
+`config/cameras.lhires-asi294.example.json` is the non-default campus
+50 cm/Lhires/ASI294 deployment example with one logical `SCI` channel. Selecting
+`driver: "zwo"` in the main Runtime still fails clearly because managed
+startup/shutdown and API integration are the active next boundary; it does not
+mean the low-level driver is absent.
+
+Configure the machine-local SDK path, then use the read-only discovery and
+explicit hardware smoke commands:
+
+```powershell
+$env:ICS_ZWO_SDK_LIBRARY = "C:\path\to\ASICamera2.dll"
+python -m justls.ics.drivers.zwo.probe
+python -m justls.ics.drivers.zwo.probe --controls
+python -m justls.ics.drivers.zwo.capture --data-root "var\hardware-smoke" --exposure-s 0.01 --gain 0 --offset 30 --frame-type test
+```
+
+The first command is read-only. `--controls` opens/initializes the camera and
+reads values. The capture command writes a real FITS and quicklook. ASIStudio,
+ASIImg, and ASICap are reference tools only; the runtime dependency is the ZWO
+driver/SDK library.
 
 Simulation products are real local files, but their FITS metadata and
 ExposureRecord remain marked `SIMULATE=true` / `simulated=true`. The default
@@ -321,6 +349,8 @@ Avoid adding one-off phase notes. If a decision remains useful, fold it into one
 tests/api/          API behavior and response contracts
 tests/application/  application services and use-case contracts
 tests/adapters/     simulator adapter parity contracts
+tests/drivers/      vendor SDK/driver contract tests
+tests/infra/        configuration and FITS publication contracts
 tests/domain/       domain models and validation
 tests/kernel/       runtime, job, state, and guard behavior
 tests/ui/           UI routes, static shells, static assets, runtime gates
