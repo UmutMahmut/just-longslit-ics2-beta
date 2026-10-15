@@ -1,0 +1,60 @@
+# Python cache / bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Test / tooling cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# IDE / editor
+.vscode/
+.idea/
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local logs / temp
+*.log
+*.tmp
+*.bak
+
+# Local environment / secrets
+.env
+.env.*
+!.env.example
+!env.example
+!env.*.example
+*.secret
+secrets.*
+
+# Local databases / runtime artifacts
+*.db
+*.sqlite
+*.sqlite3
+*.pid
+
+# Temporary personal debug files
+tmp_check.py
+# Python packaging / build artifacts
+*.egg-info/
+build/
+dist/
+
+# ICS_beta generated FITS and quicklook products
+var/
+
+# Local persisted operator setup context
+.justls/

@@ -1,0 +1,50 @@
+{
+  "schema_version": 2,
+  "profile_name": "test-50cm-lhires-asi294",
+  "detector_profile_name": "lhires-asi294-test-detector",
+  "data_root": "var/data",
+  "devices": [
+    {
+      "device_id": "asi294mc-pro-01",
+      "driver": "zwo",
+      "manufacturer": "ZWO",
+      "model": "ASI294MC Pro",
+      "serial": "28344F041D010900",
+      "width": 4144,
+      "height": 2822,
+      "bit_depth": 14,
+      "gain": 120,
+      "offset": 30,
+      "binning": 1,
+      "preview_exposure_ms": 100
+    },
+    {
+      "device_id": "slit-guide-camera-01",
+      "driver": "simulated",
+      "manufacturer": "SIMULATED",
+      "model": "ASI678MC (simulated until the ZWO preview path lands)",
+      "serial": "2813CF0520010900",
+      "width": 640,
+      "height": 480,
+      "bit_depth": 8,
+      "gain": 100,
+      "preview_exposure_ms": 100
+    }
+  ],
+  "role_bindings": [
+    {
+      "role": "science",
+      "device_id": "asi294mc-pro-01",
+      "logical_channels": [
+        "SCI"
+      ],
+      "shared_capture": false
+    },
+    {
+      "role": "slit",
+      "device_id": "slit-guide-camera-01",
+      "logical_channels": [],
+      "shared_capture": false
+    }
+  ]
+}

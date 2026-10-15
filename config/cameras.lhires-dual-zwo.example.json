@@ -1,0 +1,50 @@
+{
+  "schema_version": 2,
+  "profile_name": "lhires-dual-zwo",
+  "detector_profile_name": "lhires-asi294-asi678-dual",
+  "data_root": "var/data",
+  "devices": [
+    {
+      "device_id": "asi294mc-pro-01",
+      "driver": "zwo",
+      "manufacturer": "ZWO",
+      "model": "ASI294MC Pro",
+      "serial": "28344F041D010900",
+      "width": 4144,
+      "height": 2822,
+      "bit_depth": 14,
+      "gain": 120,
+      "offset": 30,
+      "binning": 1,
+      "preview_exposure_ms": 100
+    },
+    {
+      "device_id": "asi678mc-guide-01",
+      "driver": "zwo",
+      "manufacturer": "ZWO",
+      "model": "ASI678MC",
+      "serial": "2813CF0520010900",
+      "width": 1920,
+      "height": 1080,
+      "bit_depth": 12,
+      "gain": 150,
+      "offset": 30,
+      "binning": 2,
+      "preview_exposure_ms": 100
+    }
+  ],
+  "role_bindings": [
+    {
+      "role": "science",
+      "device_id": "asi294mc-pro-01",
+      "logical_channels": ["SCI"],
+      "shared_capture": false
+    },
+    {
+      "role": "slit",
+      "device_id": "asi678mc-guide-01",
+      "logical_channels": [],
+      "shared_capture": false
+    }
+  ]
+}

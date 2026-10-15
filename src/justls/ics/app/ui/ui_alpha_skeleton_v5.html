@@ -1,0 +1,3155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <title>JUST 长缝光谱仪 ICS 2.0 · UI Alpha Skeleton</title>
+<script>
+  (function () {
+    const KEY = "justls_theme_v2";
+    const LEGACY = "justls_theme_v1";
+    let mode = null;
+
+    try {
+      mode = localStorage.getItem(KEY) || localStorage.getItem(LEGACY);
+    } catch (e) {
+      mode = null;
+    }
+
+    if (mode !== "light" && mode !== "dark") {
+      const prefersLight =
+        window.matchMedia &&
+        window.matchMedia("(prefers-color-scheme: light)").matches;
+      mode = prefersLight ? "light" : "dark";
+    }
+
+    const root = document.documentElement;
+    root.classList.toggle("theme-light", mode === "light");
+    root.classList.toggle("theme-dark", mode !== "light");
+
+    try {
+      localStorage.setItem(KEY, mode);
+      if (localStorage.getItem(LEGACY) != null) {
+        localStorage.removeItem(LEGACY);
+      }
+    } catch (e) {
+      // ignore
+    }
+  })();
+</script>
+  <!--
+    UI Alpha Skeleton v4
+    Purpose:
+      - information architecture and page-wireframe skeleton only
+      - preserve dual-theme, live-vision-first overview, cameras/guider first-class pages
+      - keep current ICS 2.0 realities honest: capability, demo, not-wired, future
+
+    Primary stable API hooks at current stage:
+      GET  /api/v1/status/full
+      GET  /api/v1/status
+      GET  /api/v1/health
+      GET  /api/v1/capabilities
+      GET  /api/v1/observation/status
+      POST /api/v1/observation/arm
+      POST /api/v1/observation/start
+      POST /api/v1/observation/finish
+      POST /api/v1/observation/stop_readout
+      POST /api/v1/observation/abort_discard
+      GET  /api/v1/calibration/status
+      POST /api/v1/calibration/mode
+      POST /api/v1/calibration/lamp
+      POST /api/v1/lamp
+      GET  /api/v1/detector/config
+      POST /api/v1/detector/config
+      GET  /api/v1/presets
+      POST /api/v1/presets/apply
+      POST /api/v1/slit
+      POST /api/v1/slit_angle
+
+    Live-image hooks are intentionally marked as LIVE / DEMO / NOT WIRED placeholders.
+  -->
+  <style>
+    :root {
+      --bg-0: #020617;
+      --bg-1: #0b1120;
+      --bg-2: #101827;
+      --bg-3: #162033;
+      --bg-elev: rgba(15, 23, 42, 0.84);
+      --panel: rgba(15, 23, 42, 0.92);
+      --panel-2: rgba(10, 16, 29, 0.95);
+      --surface: rgba(15, 23, 42, 0.68);
+      --soft: rgba(148, 163, 184, 0.08);
+      --border: rgba(148, 163, 184, 0.20);
+      --border-strong: rgba(148, 163, 184, 0.32);
+      --text: #e5edf8;
+      --muted: #9fb0c7;
+      --muted-2: #7b8da6;
+      --accent: #4f8cff;
+      --accent-2: #4fd1ff;
+      --success: #38d39f;
+      --warning: #ffbf5f;
+      --danger: #ff7878;
+      --info: #74b4ff;
+      --focus: rgba(79, 140, 255, 0.95);
+      --shadow: 0 20px 56px rgba(0, 0, 0, 0.45);
+      --radius-xl: 22px;
+      --radius-lg: 18px;
+      --radius-md: 14px;
+      --radius-sm: 10px;
+      --header-height: 78px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, Monaco, "Liberation Mono", monospace;
+      --sans: Inter, "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    html.theme-light {
+      --bg-0: #eef4ff;
+      --bg-1: #ffffff;
+      --bg-2: #f7faff;
+      --bg-3: #edf4ff;
+      --bg-elev: rgba(255, 255, 255, 0.86);
+      --panel: rgba(255, 255, 255, 0.94);
+      --panel-2: rgba(248, 250, 254, 0.98);
+      --surface: rgba(15, 23, 42, 0.04);
+      --soft: rgba(15, 23, 42, 0.05);
+      --border: rgba(15, 23, 42, 0.12);
+      --border-strong: rgba(15, 23, 42, 0.20);
+      --text: #102033;
+      --muted: #506279;
+      --muted-2: #667a93;
+      --shadow: 0 20px 60px rgba(15, 23, 42, 0.14);
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      min-height: 100%;
+      font-family: var(--sans);
+      background:
+        radial-gradient(circle at 0% 0%, rgba(79, 140, 255, 0.18), transparent 32%),
+        radial-gradient(circle at 100% 0%, rgba(79, 209, 255, 0.16), transparent 32%),
+        linear-gradient(180deg, var(--bg-0), var(--bg-1));
+      color: var(--text);
+    }
+
+    body {
+      padding: 16px;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+    }
+
+.app {
+  width: min(1460px, 100%);
+  min-height: calc(100vh - 32px);
+  border-radius: 28px;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--bg-elev), var(--panel-2));
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(20px);
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+}
+
+.shell {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  backdrop-filter: blur(20px);
+}
+
+@supports not (position: sticky) {
+  .shell {
+    position: static;
+  }
+}
+
+.header {
+  border-bottom: 1.5px solid var(--border-strong);
+  padding: 14px 18px 10px;
+  display: grid;
+  grid-template-columns: minmax(320px, 0.5fr) minmax(360px, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  background: linear-gradient(180deg, rgba(79, 140, 255, 0.05), transparent 90%);
+}
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  max-width: 560px;
+}
+
+.brand h1 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.10;
+  font-weight: 760;
+  letter-spacing: 0.01em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+    .brand small {
+      color: var(--muted);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-size: 11px;
+    }
+
+    .header-badge,
+    .mini-badge,
+    .state-badge,
+    .status-badge,
+    .cap-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 6px 10px;
+      background: var(--surface);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .state-badge.live { color: var(--success); border-color: rgba(56, 211, 159, 0.1); }
+    .state-badge.demo { color: var(--warning); border-color: rgba(255, 191, 95, 0.25); }
+    .state-badge.stale { color: var(--danger); border-color: rgba(255, 120, 120, 0.3); }
+    .state-badge.future { color: var(--muted); }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--muted-2);
+      box-shadow: 0 0 12px currentColor;
+    }
+    .status-dot.ok { background: var(--success); color: var(--success); }
+    .status-dot.warn { background: var(--warning); color: var(--warning); }
+    .status-dot.err { background: var(--danger); color: var(--danger); }
+    .status-dot.info { background: var(--info); color: var(--info); }
+
+    .header-mid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .header-block {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-height: 94px;
+    }
+
+    .header-block-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      color: var(--muted);
+      letter-spacing: 0.10em;
+    }
+
+    .time-grid,
+    .quick-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      font-size: 12px;
+    }
+
+    .metric { display: flex; justify-content: space-between; gap: 8px; }
+    .metric span:first-child { color: var(--muted); }
+    .metric code { font-family: var(--mono); }
+
+    .header-right {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: stretch;
+      min-width: 250px;
+    }
+
+    .header-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .theme-switch {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .switch {
+      position: relative;
+      width: 46px;
+      height: 24px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.28);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      flex: 0 0 auto;
+    }
+
+    .switch::after {
+      content: "";
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 16px;
+      height: 16px;
+      border-radius: 999px;
+      background: #ffffff;
+      transition: transform 0.2s ease;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.18);
+    }
+
+    html.theme-light .switch::after { transform: translateX(21px); }
+
+.message-rail {
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 18px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+
+.message-rail[data-level="info"] {
+  background: linear-gradient(180deg, rgba(116, 180, 255, 0.05), transparent);
+}
+
+.message-rail[data-level="success"] {
+  background: linear-gradient(180deg, rgba(56, 211, 159, 0.08), transparent);
+}
+
+.message-rail[data-level="warning"] {
+  background: linear-gradient(180deg, rgba(255, 191, 95, 0.08), transparent);
+}
+
+.message-rail[data-level="error"] {
+  background: linear-gradient(180deg, rgba(255, 120, 120, 0.10), transparent);
+}
+
+.message-rail .rail-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  color: var(--muted);
+}
+
+.message-rail .rail-body {
+  font-size: 13px;
+  min-height: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.message-rail .rail-body strong {
+  font-weight: 700;
+}
+
+.message-rail .rail-body-text {
+  color: var(--text);
+}
+
+.message-rail .rail-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+    .nav {
+      padding: 10px 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .tab-btn,
+    .subtab-btn,
+    .btn {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 8px 12px;
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+    }
+
+    .tab-btn:hover,
+    .subtab-btn:hover,
+    .btn:hover {
+      border-color: var(--border-strong);
+      transform: translateY(-1px);
+    }
+
+    .tab-btn.active,
+    .subtab-btn.active,
+    .btn.primary {
+      background: linear-gradient(135deg, rgba(79, 140, 255, 0.92), rgba(79, 209, 255, 0.88));
+      color: #08101f;
+      border-color: transparent;
+      font-weight: 700;
+    }
+
+    .tab-btn .mini-badge,
+    .subtab-btn .mini-badge {
+      padding: 2px 6px;
+      font-size: 10px;
+      background: rgba(255,255,255,0.14);
+      border-color: transparent;
+    }
+
+    .main {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-height: 0;
+    }
+
+    .page { display: none; }
+    .page.active { display: block; }
+
+    .grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .grid-1-2 { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
+    .grid-2-1 { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+    .grid-overview-top { grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); }
+    .grid-live { grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr)); }
+    .grid-overview-bottom { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
+    .grid-obs-top { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); }
+    .grid-instrument-slit { grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); }
+    .grid-camera-main { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid-diag-top { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
+
+    .panel {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background: linear-gradient(180deg, var(--panel), var(--panel-2));
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .panel-title {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.2;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      font-weight: 740;
+    }
+
+    .panel-kicker {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .panel-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .stack { display: flex; flex-direction: column; gap: 12px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+    .card-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .status-card,
+    .summary-card,
+    .metric-card,
+    .live-card,
+    .placeholder-card,
+    .result-card,
+    .log-card,
+    .raw-card,
+    .table-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+      padding: 12px;
+      min-width: 0;
+    }
+
+    .status-card h3,
+    .summary-card h3,
+    .live-card h3,
+    .placeholder-card h3,
+    .result-card h3,
+    .log-card h3,
+    .raw-card h3,
+    .table-card h3 {
+      margin: 0 0 10px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+
+    .big-state {
+      font-size: 26px;
+      line-height: 1;
+      font-weight: 760;
+      letter-spacing: 0.01em;
+    }
+
+    .kv-list {
+      display: grid;
+      grid-template-columns: 140px 1fr;
+      gap: 8px 10px;
+      font-size: 13px;
+    }
+    .kv-list dt { color: var(--muted); }
+    .kv-list dd { margin: 0; }
+
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .data-chip {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 6px 10px;
+      background: rgba(255,255,255,0.03);
+      font-size: 12px;
+    }
+
+    .button-grid {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .button-grid.wide-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+.danger {
+  border-color: rgba(255, 120, 120, 0.42);
+  color: #fff2f2;
+  background: rgba(255, 120, 120, 0.16);
+}
+
+.warning {
+  border-color: rgba(255, 191, 95, 0.42);
+  color: var(--text);
+  background: rgba(255, 191, 95, 0.16);
+}
+
+html.theme-light .danger {
+  border-color: rgba(220, 38, 38, 0.34);
+  background: rgba(220, 38, 38, 0.14);
+  color: #7f1d1d;
+  font-weight: 700;
+}
+
+html.theme-light .danger:hover {
+  border-color: rgba(220, 38, 38, 0.50);
+  background: rgba(220, 38, 38, 0.18);
+}
+
+html.theme-light .warning {
+  border-color: rgba(217, 119, 6, 0.30);
+  background: rgba(245, 158, 11, 0.14);
+  color: #92400e;
+  font-weight: 600;
+}
+
+html.theme-light .warning:hover {
+  border-color: rgba(217, 119, 6, 0.44);
+  background: rgba(245, 158, 11, 0.18);
+}
+    .field-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .field label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      background: rgba(255,255,255,0.02);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      font: inherit;
+      font-size: 13px;
+      min-width: 0;
+    }
+
+    textarea { min-height: 92px; resize: vertical; }
+
+    input:focus,
+    select:focus,
+    textarea:focus,
+    .btn:focus,
+    .tab-btn:focus,
+    .subtab-btn:focus,
+    .switch:focus {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    .hint {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .live-frame {
+      min-height: 210px;
+      border-radius: 14px;
+      border: 1px dashed var(--border-strong);
+      background:
+        linear-gradient(180deg, rgba(79,140,255,0.08), transparent 60%),
+        radial-gradient(circle at 50% 40%, rgba(255,255,255,0.08), transparent 34%),
+        linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .live-frame.small { min-height: 150px; }
+    .live-frame.large { min-height: 320px; }
+
+    .live-watermark {
+      position: absolute;
+      inset: auto 10px 10px auto;
+      font-size: 11px;
+      color: var(--muted);
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(0,0,0,0.26);
+      border: 1px solid var(--border);
+    }
+
+    html.theme-light .live-watermark { background: rgba(255,255,255,0.68); }
+
+    .live-caption {
+      font-size: 13px;
+      color: var(--muted);
+      text-align: center;
+      padding: 0 14px;
+    }
+
+    .overlay-tags {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .section-divider {
+      border-top: 1px solid var(--border);
+      margin-top: 6px;
+      padding-top: 12px;
+    }
+
+    .subtabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .subpage { display: none; }
+    .subpage.active { display: block; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      padding: 8px 6px;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--muted);
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      font-weight: 700;
+    }
+
+    code,
+    pre,
+    .mono {
+      font-family: var(--mono);
+    }
+
+    pre {
+      margin: 0;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.02);
+      overflow: auto;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .placeholder-note {
+      font-size: 12px;
+      color: var(--muted);
+      border-left: 3px solid rgba(79, 140, 255, 0.4);
+      padding-left: 10px;
+    }
+
+    .log-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 8px;
+      font-size: 13px;
+    }
+
+    .log-item {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      display: grid;
+      grid-template-columns: 112px 1fr;
+      gap: 10px;
+      background: rgba(255,255,255,0.02);
+    }
+
+    .log-time { color: var(--muted); font-family: var(--mono); }
+
+    .footer-note {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    @media (max-width: 1280px) {
+      .header {
+        grid-template-columns: 1fr;
+      }
+      .header-actions,
+      .theme-switch { justify-content: flex-start; }
+      .grid-live { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 1040px) {
+      .grid-overview-top,
+      .grid-overview-bottom,
+      .grid-obs-top,
+      .grid-instrument-slit,
+      .grid-diag-top,
+      .grid-1-2,
+      .grid-2-1,
+      .grid-3,
+      .grid-4,
+      .grid-camera-main,
+      .grid-2 {
+        grid-template-columns: 1fr;
+      }
+      .field-grid,
+      .button-grid,
+      .button-grid.wide-3,
+      .header-mid,
+      .time-grid,
+      .quick-grid { grid-template-columns: 1fr; }
+      .log-item { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 760px) {
+      body { padding: 10px; }
+      .app { min-height: calc(100vh - 20px); }
+      .nav { overflow-x: auto; flex-wrap: nowrap; }
+      .grid-live { grid-template-columns: 1fr; }
+      .kv-list { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="shell">
+    <header class="header">
+      <div class="brand">
+        <small>JUST Telescope · Long-Slit Spectrograph · ICS 2.0</small>
+        <h1>
+          JUST 长缝光谱仪控制台
+          <span class="header-badge">UI Alpha Skeleton</span>
+          <span class="header-badge">White / Night Themes</span>
+        </h1>
+      </div>
+
+      <div class="header-mid">
+        <section class="header-block" aria-label="global timing">
+          <div class="header-block-title">Global Timing</div>
+          <div class="time-grid">
+            <div class="metric"><span>Local</span><code data-bind="clock.local">19:38:25</code></div>
+            <div class="metric"><span>UTC</span><code data-bind="clock.utc">11:38:25</code></div>
+            <div class="metric"><span>LST</span><code data-bind="clock.lst">16:51:03</code></div>
+            <div class="metric"><span>DATE</span><code data-bind="clock.date">2026-04-09</code></div>
+            <div class="metric"><span>JD / MJD</span><code data-bind="clock.jdMjd">2461140.98 / 61140.48</code></div>
+            <div class="metric"><span>Mode</span><code data-bind="runtime.mode">sim</code></div>
+          </div>
+        </section>
+
+        <section class="header-block" aria-label="connection and freshness">
+          <div class="header-block-title">Connection & Freshness</div>
+          <div class="quick-grid">
+            <div class="metric">
+  <span>Status</span>
+  <span class="status-badge" data-state="conn.badge">
+    <span class="status-dot ok" data-state="conn.dot"></span>
+    <span data-bind="conn.state">Connected</span>
+  </span>
+</div>
+            <div class="metric"><span>API</span><code data-bind="api.base">http://127.0.0.1:8000</code></div>
+            <div class="metric"><span>RTT</span><code data-bind="conn.rtt">92 ms</code></div>
+            <div class="metric"><span>Last OK</span><code data-bind="conn.last_ok">19:38:24</code></div>
+            <div class="metric"><span>Polling</span><code data-bind="conn.poll">1.0 s</code></div>
+            <div class="metric"><span>Stale Threshold</span><code data-bind="conn.staleThreshold">5.0 s</code></div>
+          </div>
+        </section>
+      </div>
+
+      <div class="header-right">
+	<div class="header-actions">
+  	  <button class="btn primary" type="button" data-action="app.refresh">Refresh</button>
+  	  <button class="btn" type="button" data-action="logs.copy">Copy Logs</button>
+  	  <button class="btn" type="button" data-action="settings.open">Settings</button>
+	</div>
+        <div class="theme-switch">
+          <span>夜间模式</span>
+          <button id="themeSwitch" class="switch" type="button" aria-label="toggle theme"></button>
+          <span>白天模式</span>
+        </div>
+      </div>
+    </header>
+
+<div
+  class="message-rail"
+  id="systemMessageRail"
+  role="status"
+  aria-live="polite"
+  aria-atomic="true"
+  aria-labelledby="systemMessageLabel"
+  data-level="info"
+>
+  <div class="rail-title" id="systemMessageLabel">System Message</div>
+  <div class="rail-body">
+    <strong data-bind="message.levelLabel">Info</strong>
+    <span class="rail-body-text" data-bind="message.text">系统消息区占位。后续这里显示 observation、preset、calibration 与错误反馈。</span>
+  </div>
+  <div class="rail-actions">
+    <span class="state-badge future" data-bind="message.badge">INFO</span>
+  </div>
+</div>
+
+<nav
+  class="nav"
+  role="tablist"
+  aria-label="Primary pages"
+>
+  <button
+    class="tab-btn active"
+    id="tab-overview"
+    role="tab"
+    aria-selected="true"
+    aria-controls="panel-overview"
+    tabindex="0"
+    data-page="overview"
+    type="button"
+  >
+    总览 Overview
+  </button>
+
+  <button
+    class="tab-btn"
+    id="tab-observation"
+    role="tab"
+    aria-selected="false"
+    aria-controls="panel-observation"
+    tabindex="-1"
+    data-page="observation"
+    type="button"
+  >
+    观测 Observation
+  </button>
+
+  <button
+    class="tab-btn"
+    id="tab-instrument"
+    role="tab"
+    aria-selected="false"
+    aria-controls="panel-instrument"
+    tabindex="-1"
+    data-page="instrument"
+    type="button"
+  >
+    仪器 Instrument
+  </button>
+
+  <button
+    class="tab-btn"
+    id="tab-presets"
+    role="tab"
+    aria-selected="false"
+    aria-controls="panel-presets"
+    tabindex="-1"
+    data-page="presets"
+    type="button"
+  >
+    预设 Presets
+  </button>
+
+  <button
+    class="tab-btn"
+    id="tab-cameras"
+    role="tab"
+    aria-selected="false"
+    aria-controls="panel-cameras"
+    tabindex="-1"
+    data-page="cameras"
+    type="button"
+  >
+    相机 Cameras <span class="mini-badge">DEMO / NOT WIRED</span>
+  </button>
+
+  <button
+    class="tab-btn"
+    id="tab-guider"
+    role="tab"
+    aria-selected="false"
+    aria-controls="panel-guider"
+    tabindex="-1"
+    data-page="guider"
+    type="button"
+  >
+    导星 Guider <span class="mini-badge">DEMO / FUTURE</span>
+  </button>
+
+  <button
+    class="tab-btn"
+    id="tab-quicklook"
+    role="tab"
+    aria-selected="false"
+    aria-controls="panel-quicklook"
+    tabindex="-1"
+    data-page="quicklook"
+    type="button"
+  >
+    快显 Quicklook <span class="mini-badge">FUTURE</span>
+  </button>
+
+  <button
+    class="tab-btn"
+    id="tab-diagnostics"
+    role="tab"
+    aria-selected="false"
+    aria-controls="panel-diagnostics"
+    tabindex="-1"
+    data-page="diagnostics"
+    type="button"
+  >
+    诊断 Diagnostics
+  </button>
+</nav>
+  </div>
+    <main class="main">
+      <!-- Overview -->
+      <section
+  class="page active"
+  id="panel-overview"
+  role="tabpanel"
+  aria-labelledby="tab-overview"
+  data-page="overview"
+>
+    <div class="grid grid-overview-top">
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Global State & Quick Actions</h2>
+            <div class="panel-kicker">第一屏同时承载关键状态、关键动作和 live vision glance，不让值班员为了确认系统是否还在工作而频繁跳页。</div>
+          </div>
+          <div class="panel-actions">
+            <span class="state-badge live" data-state="overview.source.statusFull">
+              <span class="status-dot ok" data-state="overview.source.statusFull.dot"></span>
+              status/full
+            </span>
+            <span class="state-badge live" data-state="overview.source.observationStatus">
+              <span class="status-dot ok" data-state="overview.source.observationStatus.dot"></span>
+              observation/status
+            </span>
+          </div>
+        </div>
+        <div class="grid grid-3">
+          <div class="status-card">
+            <h3>Observation</h3>
+            <div class="big-state" data-bind="overview.observation.state">ready_to_arm</div>
+            <dl class="kv-list section-divider">
+              <dt>armed</dt><dd data-bind="overview.observation.armed">none</dd>
+              <dt>last exposure</dt><dd data-bind="overview.observation.lastExposure">none</dd>
+              <dt>result</dt><dd data-bind="overview.observation.result">—</dd>
+            </dl>
+          </div>
+          <div class="status-card">
+            <h3>Calibration</h3>
+            <div class="big-state" data-bind="overview.calibration.mode">science</div>
+            <dl class="kv-list section-divider">
+              <dt>lamp</dt><dd data-bind="overview.calibration.lamp">none</dd>
+              <dt>enabled</dt><dd data-bind="overview.calibration.enabled">false</dd>
+              <dt>mirror</dt><dd data-bind="overview.calibration.mirror">false</dd>
+            </dl>
+          </div>
+          <div class="status-card">
+            <h3>Slit + Detector</h3>
+            <div class="big-state" data-bind="overview.slitDetector.summary">120.0 μm · 0°</div>
+            <dl class="kv-list section-divider">
+              <dt>profile</dt><dd data-bind="overview.slitDetector.profile">default</dd>
+              <dt>B/G/R</dt><dd data-bind="overview.slitDetector.bgr">off / off / off</dd>
+              <dt>trigger</dt><dd data-bind="overview.slitDetector.trigger">internal</dd>
+            </dl>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Quick Actions</h2>
+            <div class="panel-kicker">这些按钮是总览快捷动作，不替代 Observation / Instrument 专页里的完整表单与确认流程。</div>
+          </div>
+        </div>
+        <div class="button-grid wide-3">
+          <button class="btn" type="button" data-action="observation.arm" data-state="obs.canArm">Arm</button>
+          <button class="btn primary" type="button" data-action="observation.start" data-state="obs.canStart">Start</button>
+          <button class="btn" type="button" data-action="observation.finish" data-state="obs.canFinish">Finish</button>
+          <button class="btn warning" type="button" data-action="observation.stop_readout" data-state="obs.canStopReadout">Stop &amp; Readout</button>
+          <button class="btn danger" type="button" data-action="observation.abort_discard" data-state="obs.canAbortDiscard">Abort &amp; Discard</button>
+          <button class="btn" type="button" data-action="nav.presets">Go to Presets</button>
+        </div>
+        <div class="placeholder-note">危险动作必须在真实实现阶段加二次确认。总览页只提供最短路径，不承载复杂配置输入。</div>
+      </section>
+    </div>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Live Vision Strip</h2>
+              <div class="panel-kicker">总览必须看得到 live image，但它们要以“小而常驻”的方式服务态势感知，而不是以大图装饰页面。</div>
+            </div>
+<div class="panel-actions">
+  <span class="state-badge demo" data-state="live.demoPolicy">DEMO source allowed</span>
+  <span class="state-badge stale" data-state="live.stalePolicy">STALE indicator required</span>
+</div>
+          </div>
+          <div class="grid grid-live">
+<article class="live-card">
+  <h3>Slit / Guide Live</h3>
+  <div class="live-frame large" data-live-source="camera.slit" data-state="live.camera.slit">
+    <div class="overlay-tags">
+      <span class="state-badge demo" data-bind="live.slit.modeLabel">DEMO</span>
+      <span class="cap-badge" data-bind="live.slit.capabilityText">cap: slit_monitor_camera=false / guider=false</span>
+    </div>
+    <div class="live-caption" data-bind="live.slit.caption">
+      Slit / guide live tile. In real UI this area should show LIVE / DEMO / STALE / OFFLINE status, frame age, and last frame timestamp.
+    </div>
+    <div class="live-watermark" data-bind="live.slit.path">/api/v1/camera/slit/latest.jpg</div>
+  </div>
+  <div class="row">
+    <span class="data-chip" data-bind="live.slit.source">source: placeholder</span>
+    <span class="data-chip" data-bind="live.slit.lastFrame">last frame: 19:38:24</span>
+    <span class="data-chip" data-bind="live.slit.age">age: 1.0 s</span>
+    <button class="btn" type="button" data-action="nav.guider">Open Guider</button>
+  </div>
+</article>
+
+<article class="live-card">
+  <h3>B Channel</h3>
+  <div class="live-frame small" data-live-source="camera.b" data-state="live.camera.b">
+    <div class="overlay-tags">
+      <span class="state-badge demo" data-bind="live.b.modeLabel">DEMO</span>
+      <span class="cap-badge" data-bind="live.b.capabilityText">B / disabled</span>
+    </div>
+    <div class="live-caption" data-bind="live.b.caption">B latest frame glance</div>
+    <div class="live-watermark" data-bind="live.b.path">/api/v1/camera/b/latest.jpg</div>
+  </div>
+  <div class="row">
+    <span class="data-chip" data-bind="live.b.role">role: science_b</span>
+    <span class="data-chip" data-bind="live.b.lastFrame">last: 19:38:24</span>
+    <span class="data-chip" data-bind="live.b.age">age: 1.0 s</span>
+  </div>
+</article>
+
+<article class="live-card">
+  <h3>G Channel</h3>
+  <div class="live-frame small" data-live-source="camera.g" data-state="live.camera.g">
+    <div class="overlay-tags">
+      <span class="state-badge demo" data-bind="live.g.modeLabel">DEMO</span>
+      <span class="cap-badge" data-bind="live.g.capabilityText">G / disabled</span>
+    </div>
+    <div class="live-caption" data-bind="live.g.caption">G latest frame glance</div>
+    <div class="live-watermark" data-bind="live.g.path">/api/v1/camera/g/latest.jpg</div>
+  </div>
+  <div class="row">
+    <span class="data-chip" data-bind="live.g.role">role: science_g</span>
+    <span class="data-chip" data-bind="live.g.lastFrame">last: 19:38:24</span>
+    <span class="data-chip" data-bind="live.g.age">age: 1.0 s</span>
+  </div>
+</article>
+
+<article class="live-card">
+  <h3>R Channel</h3>
+  <div class="live-frame small" data-live-source="camera.r" data-state="live.camera.r">
+    <div class="overlay-tags">
+      <span class="state-badge demo" data-bind="live.r.modeLabel">DEMO</span>
+      <span class="cap-badge" data-bind="live.r.capabilityText">R / disabled</span>
+    </div>
+    <div class="live-caption" data-bind="live.r.caption">R latest frame glance</div>
+    <div class="live-watermark" data-bind="live.r.path">/api/v1/camera/r/latest.jpg</div>
+  </div>
+  <div class="row">
+    <span class="data-chip" data-bind="live.r.role">role: science_r</span>
+    <span class="data-chip" data-bind="live.r.lastFrame">last: 19:38:24</span>
+    <span class="data-chip" data-bind="live.r.age">age: 1.0 s</span>
+  </div>
+</article>
+
+        </div>
+      </section>
+
+        <div class="grid grid-3">
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <h2 class="panel-title">Observation Snapshot</h2>
+                  <div class="panel-kicker">当前观测生命周期信息与最近一次结果摘要。</div>
+                </div>
+              </div>
+              <div class="summary-card">
+                <h3>Current</h3>
+                <dl class="kv-list">
+                  <dt>state</dt><dd data-bind="overview.snapshot.observation.state">ready_to_arm</dd>
+                  <dt>armed exposure</dt><dd data-bind="overview.snapshot.observation.armedExposure">none</dd>
+                  <dt>last exposure</dt><dd data-bind="overview.snapshot.observation.lastExposure">none</dd>
+                  <dt>result</dt><dd data-bind="overview.snapshot.observation.result">—</dd>
+                  <dt>operator note</dt><dd data-bind="overview.snapshot.observation.operatorNote">none</dd>
+                  <dt>meta</dt><dd data-bind="overview.snapshot.observation.meta">none</dd>
+                </dl>
+              </div>
+              <div class="footer-note">Hook to: <code>/api/v1/observation/status</code></div>
+            </section>
+
+          <section class="panel">
+            <div class="panel-header"><div><h2 class="panel-title">Instrument Snapshot</h2><div class="panel-kicker">当前 slit / calibration / detector 摘要。</div></div></div>
+            <div class="summary-card">
+              <h3>Instrument</h3>
+              <dl class="kv-list">
+                <dt>slit width</dt><dd data-bind="overview.snapshot.instrument.slitWidth">120.0 μm</dd>
+                <dt>slit angle</dt><dd data-bind="overview.snapshot.instrument.slitAngle">0°</dd>
+                <dt>mode</dt><dd data-bind="overview.snapshot.instrument.mode">science</dd>
+                <dt>lamp</dt><dd data-bind="overview.snapshot.instrument.lamp">off</dd>
+                <dt>profile</dt><dd data-bind="overview.snapshot.instrument.profile">default</dd>
+                <dt>B/G/R</dt><dd data-bind="overview.snapshot.instrument.bgr">off / off / off</dd>
+              </dl>
+            </div>
+            <div class="footer-note">Hook to: <code>/api/v1/status/full</code></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header"><div><h2 class="panel-title">Preset Snapshot</h2><div class="panel-kicker">Preset 应用结果与当前边界说明。</div></div></div>
+            <div class="summary-card">
+              <h3>Latest Apply Result</h3>
+              <dl class="kv-list">
+                <dt>applied_preset</dt><dd data-bind="overview.snapshot.preset.appliedPreset">—</dd>
+                <dt>calibration_applied</dt><dd data-bind="overview.snapshot.preset.calibrationApplied">—</dd>
+                <dt>slit_plan</dt><dd data-bind="overview.snapshot.preset.slitPlan">—</dd>
+                <dt>slit_applied</dt><dd data-bind="overview.snapshot.preset.slitApplied">—</dd>
+              </dl>
+            </div>
+            <div class="placeholder-note">在只读接线第一阶段，这里先保留为结构化占位；等 preset apply 动作接通后再写入真实结果。</div>
+          </section>
+        </div>
+
+        <div class="grid grid-overview-bottom">
+          <section class="panel">
+            <div class="panel-header"><div><h2 class="panel-title">Recent Events</h2><div class="panel-kicker">总览只显示最近关键事件；完整日志进入 Diagnostics。</div></div></div>
+            <ul class="log-list">
+              <li class="log-item"><span class="log-time">19:38:24</span><span>Status refresh ok · status/full</span></li>
+              <li class="log-item"><span class="log-time">19:38:20</span><span>Observation state: ready_to_arm</span></li>
+              <li class="log-item"><span class="log-time">19:38:18</span><span>Calibration mode: science</span></li>
+              <li class="log-item"><span class="log-time">19:38:16</span><span>Camera tile state: DEMO</span></li>
+            </ul>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header"><div><h2 class="panel-title">Raw Peek</h2><div class="panel-kicker">保留工程可见性，但不让 raw JSON 抢占主要任务空间。</div></div></div>
+            <div class="raw-card">
+              <h3>status/full</h3>
+              <pre>{
+  "state": {"slit_width_um": 120.0, "slit_angle_deg": 0.0, "lamp_on": false},
+  "capabilities": {"slit": true, "calib_lamps": true, "guider": false},
+  "observation": {"state": "ready_to_arm"},
+  "detector_config": {"profile_name": "default"},
+  "run_mode": "sim"
+}</pre>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- Observation -->
+      <section
+  class="page"
+  id="panel-observation"
+  role="tabpanel"
+  aria-labelledby="tab-observation"
+  data-page="observation"
+  hidden
+>
+        <div class="grid grid-obs-top">
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <h2 class="panel-title">Observation Setup & Lifecycle</h2>
+                <div class="panel-kicker">当前稳定主链：arm / start / finish / stop_readout / abort_discard。</div>
+              </div>
+              <div class="panel-actions"><span class="state-badge live">status-driven buttons</span></div>
+            </div>
+            <div class="grid grid-2">
+              <div class="status-card">
+                <h3>Arm Setup</h3>
+                <div class="field-grid">
+                  <div class="field">
+                    <label>frame_type</label>
+                    <select data-input="observation.frameType">
+                      <option>science</option>
+                      <option>flat</option>
+                      <option>arc</option>
+                      <option>test</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label>exp_time_s</label>
+                    <input type="number" value="30.0" step="0.1" data-input="observation.expTimeS" />
+                  </div>
+                  <div class="field" style="grid-column: 1 / -1;">
+                    <label>operator_note</label>
+                    <textarea
+  placeholder="在当前阶段，Observation 页只暴露后端已稳定支持的这三个字段。"
+  data-input="observation.operatorNote"
+></textarea>
+                  </div>
+                </div>
+              </div>
+              <div class="status-card">
+                <h3>Lifecycle Controls</h3>
+                <div class="button-grid wide-3">
+                  <button class="btn" type="button" data-action="observation.arm" data-state="obs.canArm">Arm</button>
+                  <button class="btn primary" type="button" data-action="observation.start" data-state="obs.canStart">Start</button>
+                  <button class="btn" type="button" data-action="observation.finish" data-state="obs.canFinish">Finish</button>
+                  <button class="btn warning" type="button" data-action="observation.stop_readout" data-state="obs.canStopReadout">Stop &amp; Readout</button>
+                  <button class="btn danger" type="button" data-action="observation.abort_discard" data-state="obs.canAbortDiscard">Abort &amp; Discard</button>
+                  <button class="btn" type="button" data-action="observation.resetForm">Reset Form</button>
+                </div>
+                <div class="placeholder-note">按钮必须按状态门控。Abort &amp; Discard 属于危险动作，真实实现阶段必须确认。</div>
+              </div>
+            </div>
+          </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <h2 class="panel-title">Current / Last Exposure</h2>
+                  <div class="panel-kicker">把当前状态和最近一次 exposure 的关键结果放在同一阅读区域。</div>
+                </div>
+              </div>
+              <div class="card-list">
+                <div class="summary-card">
+                  <h3>Current State</h3>
+                  <div class="big-state" data-bind="observation.current.state">ready_to_arm</div>
+                  <dl class="kv-list section-divider">
+                    <dt>freshness</dt><dd data-bind="observation.current.freshness">1.0 s</dd>
+                    <dt>armed_exposure</dt><dd data-bind="observation.current.armedExposure">none</dd>
+                    <dt>obs_id</dt><dd data-bind="observation.current.obsId">—</dd>
+                    <dt>exp_id</dt><dd data-bind="observation.current.expId">—</dd>
+                    <dt>operator note</dt><dd data-bind="observation.current.operatorNote">none</dd>
+                    <dt>message</dt><dd data-bind="observation.current.message">idle / waiting</dd>
+                  </dl>
+                </div>
+                <div class="summary-card">
+                  <h3>Last Exposure</h3>
+                  <dl class="kv-list">
+                    <dt>frame_type</dt><dd data-bind="observation.last.frameType">science</dd>
+                    <dt>result</dt><dd data-bind="observation.last.result">completed</dd>
+                    <dt>kept</dt><dd data-bind="observation.last.kept">true</dd>
+                    <dt>early_stop</dt><dd data-bind="observation.last.earlyStop">false</dd>
+                    <dt>discarded</dt><dd data-bind="observation.last.discarded">false</dd>
+                    <dt>started_at</dt><dd data-bind="observation.last.startedAt">—</dd>
+                    <dt>finished_at</dt><dd data-bind="observation.last.finishedAt">—</dd>
+                  </dl>
+                </div>
+              </div>
+            </section>
+        </div>
+
+        <div class="grid grid-2">
+          <section class="panel">
+            <div class="panel-header"><div><h2 class="panel-title">ObservationMeta</h2><div class="panel-kicker">这些字段已经是当前后端稳定输出的一部分，应从 raw JSON 升级为正式可读信息。</div></div></div>
+            <div class="table-card">
+              <h3>Meta</h3>
+              <dl class="kv-list">
+                <dt>obs_id</dt><dd>obs-2026-000001</dd>
+                <dt>exp_id</dt><dd>exp-2026-000001</dd>
+                <dt>frame_type</dt><dd>science</dd>
+                <dt>exp_time_s</dt><dd>30.0</dd>
+                <dt>created_at</dt><dd>2026-04-09T11:38:00Z</dd>
+                <dt>started_at</dt><dd>2026-04-09T11:38:02Z</dd>
+                <dt>finished_at</dt><dd>2026-04-09T11:38:32Z</dd>
+                <dt>operator_note</dt><dd>night run demo</dd>
+                <dt>instrument_snapshot</dt><dd>slit 120.0 μm / 0°</dd>
+                <dt>calibration_snapshot</dt><dd>science / no lamp</dd>
+                <dt>detector_config</dt><dd>default / BGR off</dd>
+              </dl>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header"><div><h2 class="panel-title">Frame Results</h2><div class="panel-kicker">当前先按轻量结果表显示，并为未来多通道结果扩展预留空间。</div></div></div>
+            <div class="table-card">
+              <h3>Results Table</h3>
+              <table>
+                <thead>
+                  <tr><th>Channel</th><th>Result</th><th>Kept</th><th>Early Stop</th><th>Discarded</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>—</td><td>completed</td><td>true</td><td>false</td><td>false</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- Instrument -->
+      <section
+  class="page"
+  id="panel-instrument"
+  role="tabpanel"
+  aria-labelledby="tab-instrument"
+  data-page="instrument"
+  hidden
+>
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Instrument Domain</h2>
+              <div class="panel-kicker">将 slit、calibration、detector 三个当前真实设备域收敛进一个一级页面，减少顶级导航噪声。</div>
+            </div>
+          </div>
+<div
+  class="subtabs"
+  role="tablist"
+  aria-label="Instrument subtabs"
+>
+  <button
+    class="subtab-btn active"
+    id="subtab-inst-slit"
+    role="tab"
+    aria-selected="true"
+    aria-controls="subpanel-inst-slit"
+    tabindex="0"
+    data-subpage="inst-slit"
+    type="button"
+  >
+    Slit
+  </button>
+
+  <button
+    class="subtab-btn"
+    id="subtab-inst-calibration"
+    role="tab"
+    aria-selected="false"
+    aria-controls="subpanel-inst-calibration"
+    tabindex="-1"
+    data-subpage="inst-calibration"
+    type="button"
+  >
+    Calibration
+  </button>
+
+  <button
+    class="subtab-btn"
+    id="subtab-inst-detector"
+    role="tab"
+    aria-selected="false"
+    aria-controls="subpanel-inst-detector"
+    tabindex="-1"
+    data-subpage="inst-detector"
+    type="button"
+  >
+    Detector
+  </button>
+</div>
+        </div>
+
+        <section
+  class="subpage active"
+  id="subpanel-inst-slit"
+  role="tabpanel"
+  aria-labelledby="subtab-inst-slit"
+  data-subpage="inst-slit"
+>
+          <div class="grid grid-instrument-slit">
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <h2 class="panel-title">Slit Control</h2>
+                <div class="panel-kicker">这里是完整控制页；Overview 只保留快捷动作与摘要。</div>
+              </div>
+            </div>
+
+            <div class="field-grid">
+              <div class="field">
+                <label>Width</label>
+                <input type="number" value="120.0" step="0.1" data-input="slit.width.value" />
+              </div>
+              <div class="field">
+                <label>Unit</label>
+                <select data-input="slit.width.unit">
+                  <option value="um">μm</option>
+                  <option value="arcsec">arcsec</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Angle</label>
+                <input type="number" value="0" step="1" data-input="slit.angle.value" />
+              </div>
+              <div class="field">
+                <label>Angle Unit</label>
+                <select disabled>
+                  <option value="deg">deg</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="row">
+              <button class="btn" type="button" data-action="slit.presetWidth" data-slit-preset="0.8">0.8"</button>
+              <button class="btn" type="button" data-action="slit.presetWidth" data-slit-preset="1.0">1.0"</button>
+              <button class="btn" type="button" data-action="slit.presetWidth" data-slit-preset="1.2">1.2"</button>
+              <button class="btn" type="button" data-action="slit.presetAngle" data-angle-preset="0">0°</button>
+              <button class="btn" type="button" data-action="slit.presetAngle" data-angle-preset="45">45°</button>
+              <button class="btn" type="button" data-action="slit.presetAngle" data-angle-preset="90">90°</button>
+            </div>
+
+            <div class="row">
+              <button class="btn primary" type="button" data-action="slit.applyWidth">Apply Width</button>
+              <button class="btn primary" type="button" data-action="slit.applyAngle">Apply Angle</button>
+            </div>
+
+            <div class="placeholder-note">
+              当前后端是两条独立接口：<code>/api/v1/slit</code> 和 <code>/api/v1/slit_angle</code>。因此这里先保持 width 与 angle 分开提交，更贴合当前 ICS2.0 的真实控制语义。
+            </div>
+          </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Slit Readback & Vision</h2>
+              <div class="panel-kicker">调完之后立刻看数值读回与 slit/guide 小画面。</div>
+            </div>
+          </div>
+
+          <div class="summary-card">
+            <h3>Readback</h3>
+            <dl class="kv-list">
+              <dt>current width</dt><dd data-bind="slit.readback.width">120.0 μm</dd>
+              <dt>current angle</dt><dd data-bind="slit.readback.angle">0°</dd>
+              <dt>measured width</dt><dd data-bind="slit.readback.measured">future</dd>
+              <dt>last update</dt><dd data-bind="slit.readback.lastUpdate">19:38:24</dd>
+            </dl>
+          </div>
+
+          <div class="live-frame small" data-live-source="camera.slit" data-state="live.camera.slit">
+            <div class="overlay-tags">
+              <span class="state-badge demo">DEMO</span>
+              <span class="cap-badge">slit monitor</span>
+            </div>
+            <div class="live-caption">Slit small feed</div>
+            <div class="live-watermark">/api/v1/camera/slit/latest.jpg</div>
+          </div>
+        </section>
+          </div>
+        </section>
+
+        <section
+        class="subpage"
+        id="subpanel-inst-calibration"
+        role="tabpanel"
+        aria-labelledby="subtab-inst-calibration"
+        data-subpage="inst-calibration"
+        hidden
+      >
+          <div class="grid grid-3">
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <h2 class="panel-title">Current Calibration State</h2>
+                <div class="panel-kicker">不要再把 calibration 简化成单一布尔 lamp。</div>
+              </div>
+            </div>
+            <div class="summary-card">
+              <h3>Current</h3>
+              <dl class="kv-list">
+                <dt>mode</dt><dd data-bind="calibration.readback.mode">science</dd>
+                <dt>active_lamp</dt><dd data-bind="calibration.readback.activeLamp">none</dd>
+                <dt>lamp_enabled</dt><dd data-bind="calibration.readback.enabled">false</dd>
+                <dt>mirror_inserted</dt><dd data-bind="calibration.readback.mirror">false</dd>
+                <dt>last update</dt><dd data-bind="calibration.readback.lastUpdate">—</dd>
+              </dl>
+            </div>
+            <div class="footer-note">Hook to: <code>/api/v1/status/full</code> + <code>/api/v1/calibration/status</code></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <h2 class="panel-title">Mode & Lamp Controls</h2>
+                <div class="panel-kicker">当前真实控制主链。</div>
+              </div>
+            </div>
+
+            <div class="field-grid">
+              <div class="field">
+                <label>Mode</label>
+                <select data-input="calibration.mode">
+                  <option value="science">science</option>
+                  <option value="calibration">calibration</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Lamp</label>
+                <select data-input="calibration.lamp">
+                  <option value="flat">flat</option>
+                  <option value="arc_hgar">arc_hgar</option>
+                  <option value="arc_ne">arc_ne</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="row">
+              <button class="btn primary" type="button" data-action="calibration.setMode">Set Mode</button>
+              <button class="btn primary" type="button" data-action="calibration.enableLamp">Enable Lamp</button>
+              <button class="btn" type="button" data-action="calibration.disableLamp">Disable Lamp</button>
+            </div>
+
+            <div class="placeholder-note">
+              当前后端控制主链是：先设 <code>/api/v1/calibration/mode</code>，再按需要设 <code>/api/v1/calibration/lamp</code>。legacy <code>/api/v1/lamp</code> 兼容入口先留在 Compatibility 区，不抢主流程。
+            </div>
+          </section>
+
+            <section class="panel">
+              <div class="panel-header"><div><h2 class="panel-title">Advanced / Compatibility</h2><div class="panel-kicker">legacy 兼容入口与后续序列控制槽位。</div></div></div>
+              <div class="placeholder-card">
+                <h3>Legacy /lamp</h3>
+                <p class="hint">保留单一灯开关入口，但不让它成为 Calibration 页的主心智模型。</p>
+                <button class="btn" type="button" data-state="cal.canLegacyLampToggle">Legacy Lamp Toggle</button>
+              </div>
+              <div class="placeholder-card">
+                <h3>Future Sequence</h3>
+                <p class="hint">Flat × N / Arc × M / sequence logging / shutter & trigger future slots.</p>
+              </div>
+            </section>
+          </div>
+        </section>
+
+       <section
+  class="subpage"
+  id="subpanel-inst-detector"
+  role="tabpanel"
+  aria-labelledby="subtab-inst-detector"
+  data-subpage="inst-detector"
+  hidden
+>
+          <div class="grid grid-2">
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <h2 class="panel-title">Current Detector Config</h2>
+                  <div class="panel-kicker">这里展示的是当前 runtime 级 detector config，不是假装已经 fully operational 的单相机参数面板。</div>
+                </div>
+              </div>
+
+              <div class="field-grid">
+                <div class="field">
+                  <label>profile_name</label>
+                  <input type="text" value="default" data-input="detector.profileName" />
+                </div>
+
+                <div class="field">
+                  <label>trigger_mode</label>
+                  <select data-input="detector.triggerMode">
+                    <option value="internal">internal</option>
+                    <option value="external">external</option>
+                    <option value="simulated">simulated</option>
+                  </select>
+                </div>
+
+                <div class="field">
+                  <label>readout_mode</label>
+                  <input type="text" value="normal" data-input="detector.readoutMode" />
+                </div>
+              </div>
+
+              <div class="row">
+                <button class="btn primary" type="button" data-action="detector.apply">
+                  Apply Detector Config
+                </button>
+              </div>
+
+              <div class="footer-note">
+                Hook to: <code>/api/v1/detector/config</code>
+              </div>
+            </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <h2 class="panel-title">B / G / R Matrix</h2>
+                <div class="panel-kicker">Detector 的物理意义是 RGB 三通道相机采集系统。当前先暴露每个通道最稳定的配置位：enabled 与 camera_role。</div>
+              </div>
+            </div>
+
+            <table>
+              <thead>
+                <tr><th>Channel</th><th>Enabled</th><th>Role</th><th>Live State</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>B</td>
+                  <td><input type="checkbox" data-input="detector.channel.B.enabled" /></td>
+                  <td><input type="text" value="science_b" data-input="detector.channel.B.role" readonly /></td>
+                  <td data-bind="detector.channel.B.liveState">DEMO / NOT WIRED</td>
+                </tr>
+                <tr>
+                  <td>G</td>
+                  <td><input type="checkbox" data-input="detector.channel.G.enabled" /></td>
+                  <td><input type="text" value="science_g" data-input="detector.channel.G.role" readonly /></td>
+                  <td data-bind="detector.channel.G.liveState">DEMO / NOT WIRED</td>
+                </tr>
+                <tr>
+                  <td>R</td>
+                  <td><input type="checkbox" data-input="detector.channel.R.enabled" /></td>
+                  <td><input type="text" value="science_r" data-input="detector.channel.R.role" readonly /></td>
+                  <td data-bind="detector.channel.R.liveState">DEMO / NOT WIRED</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div class="placeholder-note">
+              下一次 observation arm 将继承当前 detector_config。Preset apply 也会改它。当前不提前细化每个通道真实相机的底层硬件参数。
+            </div>
+          </section>
+
+          </div>
+        </section>
+      </section>
+
+      <!-- Presets -->
+      <section
+  class="page"
+  id="panel-presets"
+  role="tabpanel"
+  aria-labelledby="tab-presets"
+  data-page="presets"
+  hidden
+>
+        <div class="grid grid-3">
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <h2 class="panel-title">Preset Catalog</h2>
+                  <div class="panel-kicker">当前已稳定的 preset 目录。点击卡片即可选中，Apply 会把选中的 preset 发到后端。</div>
+                </div>
+              </div>
+              <div class="card-list" data-bind-html="presets.catalog">
+                <button class="summary-card" type="button" data-preset-name="science_default" data-state="presets.card.science_default">
+                  <h3>science_default</h3>
+                  <div class="hint">All RGB channels enabled for nominal science-mode detector configuration.</div>
+                </button>
+
+                <button class="summary-card" type="button" data-preset-name="rgb_safe_default" data-state="presets.card.rgb_safe_default">
+                  <h3>rgb_safe_default</h3>
+                  <div class="hint">Conservative RGB-safe preset with B/R enabled and G disabled.</div>
+                </button>
+
+                <button class="summary-card" type="button" data-preset-name="engineering_all_channels_off" data-state="presets.card.engineering_all_channels_off">
+                  <h3>engineering_all_channels_off</h3>
+                  <div class="hint">Engineering-safe preset with all RGB channels disabled.</div>
+                </button>
+
+                <button class="summary-card" type="button" data-preset-name="calib_flat_default" data-state="presets.card.calib_flat_default">
+                  <h3>calib_flat_default</h3>
+                  <div class="hint">Default flat-calibration preset with calibration mode and flat lamp enabled.</div>
+                </button>
+              </div>
+            </section>
+
+          <section class="panel">
+            <div class="panel-header"><div><h2 class="panel-title">Effect Preview</h2><div class="panel-kicker">让用户在 apply 前就明白 detector/calibration 会怎样变化，以及 slit 现在是否只计划不执行。</div></div></div>
+            <div class="summary-card">
+              <h3>Selected Preset</h3>
+              <dl class="kv-list">
+                <dt>detector_config</dt><dd>profile_name, B/G/R enabled map</dd>
+                <dt>calibration</dt><dd>mode / lamp / enabled</dd>
+                <dt>slit_plan</dt><dd>present / absent</dd>
+                <dt>will execute slit?</dt><dd>no (current boundary)</dd>
+              </dl>
+            </div>
+          </section>
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Apply Result</h2>
+              <div class="panel-kicker">当前阶段最关键的是把 apply 结果说明白，而不是让用户猜。</div>
+            </div>
+          </div>
+          <div class="result-card">
+            <h3>Result</h3>
+            <dl class="kv-list">
+              <dt>selected_preset</dt><dd data-bind="presets.selected">science_default</dd>
+              <dt>applied_preset</dt><dd data-bind="presets.result.appliedPreset">—</dd>
+              <dt>summary</dt><dd data-bind="presets.result.summary">—</dd>
+              <dt>calibration_applied</dt><dd data-bind="presets.result.calibrationApplied">—</dd>
+              <dt>slit_plan</dt><dd data-bind="presets.result.slitPlan">—</dd>
+              <dt>slit_applied</dt><dd data-bind="presets.result.slitApplied">—</dd>
+            </dl>
+          </div>
+          <div class="row">
+            <button class="btn primary" type="button" data-action="presets.apply" data-state="presets.canApply">
+              Apply Selected Preset
+            </button>
+          </div>
+          <div class="placeholder-note">当前阶段 slit_plan 可能存在，但 slit_applied 仍可能是 false；这不一定代表失败，而是当前系统边界。</div>
+        </section>
+        </div>
+      </section>
+
+      <!-- Cameras -->
+      <section
+  class="page"
+  id="panel-cameras"
+  role="tabpanel"
+  aria-labelledby="tab-cameras"
+  data-page="cameras"
+  hidden
+>
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Cameras</h2>
+              <div class="panel-kicker">保留一级页面。Overview 负责 glance；Cameras 负责 inspect。当前 capability=false 时页面仍然保留，但必须诚实显示 DEMO / NOT WIRED 状态。</div>
+            </div>
+<div class="panel-actions">
+  <span class="state-badge demo" data-state="cameras.capability">science_channels_bgr = false</span>
+  <span class="state-badge future" data-state="cameras.pagePolicy">page kept by design</span>
+</div>
+          </div>
+          <div class="grid grid-3">
+            <div class="summary-card"><h3>B Overview</h3><div class="chip-row"><span class="state-badge demo">DEMO</span><span class="cap-badge">disabled</span><span class="data-chip">science_b</span></div></div>
+            <div class="summary-card"><h3>G Overview</h3><div class="chip-row"><span class="state-badge demo">DEMO</span><span class="cap-badge">disabled</span><span class="data-chip">science_g</span></div></div>
+            <div class="summary-card"><h3>R Overview</h3><div class="chip-row"><span class="state-badge demo">DEMO</span><span class="cap-badge">disabled</span><span class="data-chip">science_r</span></div></div>
+          </div>
+        </div>
+
+        <div class="grid grid-camera-main">
+          <section class="panel">
+            <div class="panel-header"><div><h2 class="panel-title">B Channel</h2><div class="panel-kicker">Single-channel focus mode placeholder.</div></div></div>
+            <div class="live-frame large" data-live-source="camera.b" data-state="live.camera.b"><div class="overlay-tags"><span class="state-badge demo">DEMO</span><span class="cap-badge">B</span></div><div class="live-caption">B channel primary frame</div><div class="live-watermark">/api/v1/camera/b/latest.jpg</div></div>
+            <div class="summary-card"><h3>Meta</h3><dl class="kv-list"><dt>enabled</dt><dd>false</dd><dt>role</dt><dd>science_b</dd><dt>last frame</dt><dd>19:38:24</dd><dt>future</dt><dd>histogram / exposure / save</dd></dl></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header"><div><h2 class="panel-title">G Channel</h2><div class="panel-kicker">Single-channel focus mode placeholder.</div></div></div>
+            <div class="live-frame large" data-live-source="camera.g" data-state="live.camera.g"><div class="overlay-tags"><span class="state-badge demo">DEMO</span><span class="cap-badge">G</span></div><div class="live-caption">G channel primary frame</div><div class="live-watermark">/api/v1/camera/g/latest.jpg</div></div>
+            <div class="summary-card"><h3>Meta</h3><dl class="kv-list"><dt>enabled</dt><dd>false</dd><dt>role</dt><dd>science_g</dd><dt>last frame</dt><dd>19:38:24</dd><dt>future</dt><dd>histogram / exposure / save</dd></dl></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header"><div><h2 class="panel-title">R Channel</h2><div class="panel-kicker">Single-channel focus mode placeholder.</div></div></div>
+            <div class="live-frame large" data-live-source="camera.r" data-state="live.camera.r"><div class="overlay-tags"><span class="state-badge demo">DEMO</span><span class="cap-badge">R</span></div><div class="live-caption">R channel primary frame</div><div class="live-watermark">/api/v1/camera/r/latest.jpg</div></div>
+            <div class="summary-card"><h3>Meta</h3><dl class="kv-list"><dt>enabled</dt><dd>false</dd><dt>role</dt><dd>science_r</dd><dt>last frame</dt><dd>19:38:24</dd><dt>future</dt><dd>histogram / exposure / save</dd></dl></div>
+          </section>
+        </div>
+      </section>
+
+      <!-- Guider -->
+      <section
+  class="page"
+  id="panel-guider"
+  role="tabpanel"
+  aria-labelledby="tab-guider"
+  data-page="guider"
+  hidden
+>
+        <div class="grid grid-1-2">
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <h2 class="panel-title">Guide Live</h2>
+                <div class="panel-kicker">Guider 仍是一级页面，因为值班员需要专门的大图检查区，即便当前 capability 还没有正式接通。</div>
+              </div>
+<div class="panel-actions">
+  <span class="state-badge demo" data-state="guider.stream">DEMO</span>
+  <span class="state-badge future" data-state="guider.capability">guider=false</span>
+</div>
+            </div>
+            <div class="live-frame large" data-live-source="camera.slit" data-state="live.camera.slit">
+              <div class="overlay-tags"><span class="state-badge demo">DEMO</span><span class="cap-badge">Guide feed</span></div>
+              <div class="live-caption">Primary slit / guide live feed</div>
+              <div class="live-watermark">/api/v1/camera/slit/latest.jpg</div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header"><div><h2 class="panel-title">Guide Status & Future Controls</h2><div class="panel-kicker">页面存在，但要诚实区分现在只是占位，还是已经接入真实闭环。</div></div></div>
+            <div class="summary-card">
+              <h3>Status</h3>
+              <dl class="kv-list">
+                <dt>capability</dt><dd>false</dd>
+                <dt>stream state</dt><dd>demo</dd>
+                <dt>last frame</dt><dd>19:38:24</dd>
+                <dt>overlay</dt><dd>future</dd>
+              </dl>
+            </div>
+            <div class="button-grid">
+              <button class="btn" disabled>Acquire</button>
+              <button class="btn" disabled>Center to Slit</button>
+              <button class="btn" disabled>Guide On</button>
+              <button class="btn" disabled>Guide Off</button>
+            </div>
+            <div class="placeholder-note">不要做成空白页。即便 capability=false，这个页面也应承担“专门看 guide live、专门承载 future guide workflow”的角色。</div>
+          </section>
+        </div>
+
+        <section class="panel">
+          <div class="panel-header"><div><h2 class="panel-title">Guide Notes / History</h2><div class="panel-kicker">这里用于 future guide correction、history 和 notes。</div></div></div>
+          <div class="summary-card">
+            <h3>History Placeholder</h3>
+            <p class="hint">recent frame refresh, future centroid/offset history, reacquire notes.</p>
+          </div>
+        </section>
+      </section>
+
+      <!-- Quicklook -->
+      <section
+  class="page"
+  id="panel-quicklook"
+  role="tabpanel"
+  aria-labelledby="tab-quicklook"
+  data-page="quicklook"
+  hidden
+>
+        <div class="grid grid-2">
+          <section class="panel">
+            <div class="panel-header"><div><h2 class="panel-title">Last Exposure Summary</h2><div class="panel-kicker">虽然 quicklook pipeline 还没接，但这个页面不应该是空白。</div></div></div>
+            <div class="summary-card">
+              <h3>Summary</h3>
+              <dl class="kv-list">
+                <dt>last_exposure</dt><dd>completed science frame</dd>
+                <dt>result</dt><dd>kept</dd>
+                <dt>observation_meta</dt><dd>available</dd>
+                <dt>detector_config</dt><dd>default</dd>
+              </dl>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header"><div><h2 class="panel-title">Quicklook Preview Slots</h2><div class="panel-kicker">为 future 2D / 1D / QA 保留正式位置。</div></div></div>
+            <div class="grid grid-2">
+              <div class="placeholder-card"><h3>2D latest frame</h3><div class="live-frame small"><div class="live-caption">future slot</div></div></div>
+              <div class="placeholder-card"><h3>1D spectrum</h3><div class="live-frame small"><div class="live-caption">future slot</div></div></div>
+              <div class="placeholder-card"><h3>QA metrics</h3><p class="hint">SNR / saturation / background / centroid future slot.</p></div>
+              <div class="placeholder-card"><h3>Save / Path</h3><p class="hint">download path / saved frame reference future slot.</p></div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- Diagnostics -->
+      <section
+        class="page"
+        id="panel-diagnostics"
+        role="tabpanel"
+        aria-labelledby="tab-diagnostics"
+        data-page="diagnostics"
+        hidden
+      >
+        <div class="grid grid-diag-top">
+          <section class="panel">
+            <div class="panel-header"><div><h2 class="panel-title">Health / Runtime</h2><div class="panel-kicker">系统级读数与 subsystem 状态矩阵。</div></div></div>
+            <div class="summary-card">
+              <h3>Health</h3>
+              <dl class="kv-list">
+                <dt>ok</dt><dd data-bind="diag.health.ok">true</dd>
+                <dt>service</dt><dd data-bind="diag.health.service">just-longslit-ics-2.0</dd>
+                <dt>app_name</dt><dd data-bind="diag.health.appName">JUST Long-Slit ICS 2.0</dd>
+                <dt>run_mode</dt><dd data-bind="diag.health.runMode">sim</dd>
+                <dt>started_at</dt><dd data-bind="diag.health.startedAt">2026-04-09T11:30:00Z</dd>
+                <dt>latest_job</dt><dd data-bind="diag.health.latestJob">none</dd>
+              </dl>
+            </div>
+            <div class="table-card">
+              <h3>Subsystems</h3>
+              <table>
+                <thead><tr><th>Subsystem</th><th>State</th><th>Connected</th><th>Message</th></tr></thead>
+                <tbody data-bind-html="diag.health.subsystemsRows">
+                  <tr><td>system</td><td>idle</td><td>true</td><td>ready</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header"><div><h2 class="panel-title">Capabilities</h2><div class="panel-kicker">页面保持 honesty：支持就是支持，不支持就是 not wired / future。</div></div></div>
+            <table>
+              <thead><tr><th>Capability</th><th>Value</th><th>UI Meaning</th></tr></thead>
+              <tbody data-bind-html="diag.capabilities.rows">
+                <tr><td>slit</td><td>true</td><td>live control</td></tr>
+              </tbody>
+            </table>
+          </section>
+        </div>
+
+        <div class="grid grid-2">
+          <section class="panel">
+            <div class="panel-header"><div><h2 class="panel-title">Raw JSON</h2><div class="panel-kicker">为工程与调试保留 raw 可见性，但不干扰主操作页。</div></div></div>
+            <pre data-bind="diag.raw.bundle">{
+        "health": {"ok": true, "service": "just-longslit-ics-2.0"},
+        "status_full": {"hal": "sim", "run_mode": "sim"},
+        "observation": {"state": "ready_to_arm"},
+        "detector_config": {"profile_name": "default"}
+      }</pre>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header"><div><h2 class="panel-title">Event Logs & Settings</h2><div class="panel-kicker">把旧 UI 的 logs、API base、site、theme、polling 等工程控制收口到一页。</div></div></div>
+            <div class="log-card">
+              <h3>Event Log</h3>
+              <ul class="log-list">
+                <li class="log-item"><span class="log-time">19:38:24</span><span>status/full ok</span></li>
+                <li class="log-item"><span class="log-time">19:38:22</span><span>camera tile marked DEMO</span></li>
+                <li class="log-item"><span class="log-time">19:38:20</span><span>theme changed to night</span></li>
+              </ul>
+            </div>
+            <div class="summary-card">
+              <h3>Settings</h3>
+              <dl class="kv-list">
+                <dt>api.base</dt><dd data-bind="api.base">http://127.0.0.1:8000</dd>
+                <dt>site.lat/lon/alt</dt><dd>38.6068 / 93.8961 / 4200</dd>
+                <dt>theme</dt><dd data-bind="diag.settings.theme">night</dd>
+                <dt>polling</dt><dd data-bind="conn.poll">1.0 s</dd>
+              </dl>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+
+<script>
+  (function () {
+    const root = document.documentElement;
+
+    const pages = Array.from(document.querySelectorAll('.page'));
+    const pageButtons = Array.from(document.querySelectorAll('.tab-btn'));
+
+    const subpageButtons = Array.from(document.querySelectorAll('.subtab-btn'));
+    const subpages = Array.from(document.querySelectorAll('.subpage'));
+
+    const themeSwitch = document.getElementById('themeSwitch');
+
+    const systemMessageRail = document.getElementById('systemMessageRail');
+    const systemMessageLevel = systemMessageRail?.querySelector('[data-bind="message.levelLabel"]');
+    const systemMessageText = systemMessageRail?.querySelector('[data-bind="message.text"]');
+    const systemMessageBadge = systemMessageRail?.querySelector('[data-bind="message.badge"]');
+
+    const observationFrameType = document.querySelector('[data-input="observation.frameType"]');
+    const observationExpTime = document.querySelector('[data-input="observation.expTimeS"]');
+    const observationOperatorNote = document.querySelector('[data-input="observation.operatorNote"]');
+
+    const slitWidthInput = document.querySelector('[data-input="slit.width.value"]');
+    const slitWidthUnit = document.querySelector('[data-input="slit.width.unit"]');
+    const slitAngleInput = document.querySelector('[data-input="slit.angle.value"]');
+
+    const calibrationModeSelect = document.querySelector('[data-input="calibration.mode"]');
+    const calibrationLampSelect = document.querySelector('[data-input="calibration.lamp"]');
+
+    const detectorProfileNameInput = document.querySelector('[data-input="detector.profileName"]');
+    const detectorTriggerModeSelect = document.querySelector('[data-input="detector.triggerMode"]');
+    const detectorReadoutModeInput = document.querySelector('[data-input="detector.readoutMode"]');
+
+    const THEME_KEY = 'justls_theme_v2';
+    const THEME_LEGACY = 'justls_theme_v1';
+
+    const APP = {
+      apiBase: inferApiBase(),
+      pollMs: 2000,
+      staleThresholdSec: 5,
+      http: {
+        getTimeoutMs: 3500,
+        getRetryCount: 1,
+        getRetryDelayMs: 250,
+        postTimeoutMs: 8000,
+      },
+      timer: null,
+      lastOkAt: null,
+      lastSyncState: 'init',
+      lastRefreshAt: null,
+      lastObservationState: '—',
+      observationBusy: false,
+      selectedPreset: 'science_default',
+      lastPresetResult: null,
+    };
+
+    // Plate scale is platform-specific: um/arcsec = focal_length_mm / 206.265.
+    // The old hardcoded 128.34 was the JUST telescope value; on the 50 cm f/10
+    // Beta platform the correct value is 5000 / 206.265 = 24.24.
+    // Override by injecting window.JUSTLS_PLATFORM_CONFIG = { telescope_focal_length_mm: <mm> }.
+    const ARCSEC_PER_RADIAN = 206265;
+    const DEFAULT_TELESCOPE_FOCAL_LENGTH_MM = 5000;
+    const platformConfig = window.JUSTLS_PLATFORM_CONFIG || {};
+    const configuredFocalLengthMm = Number(platformConfig.telescope_focal_length_mm);
+    const TELESCOPE_FOCAL_LENGTH_MM =
+      Number.isFinite(configuredFocalLengthMm) && configuredFocalLengthMm > 0
+        ? configuredFocalLengthMm
+        : DEFAULT_TELESCOPE_FOCAL_LENGTH_MM;
+    const SLIT_UM_PER_ARCSEC = (TELESCOPE_FOCAL_LENGTH_MM * 1000) / ARCSEC_PER_RADIAN;
+
+    function qsa(selector) {
+      return Array.from(document.querySelectorAll(selector));
+    }
+
+    function bindText(name, value) {
+      qsa(`[data-bind="${name}"]`).forEach((el) => {
+        el.textContent = value == null ? '—' : String(value);
+      });
+    }
+
+    function bindHtml(name, html) {
+      qsa(`[data-bind-html="${name}"]`).forEach((el) => {
+        el.innerHTML = html;
+      });
+    }
+
+    function setStateBadgeVariant(name, variant) {
+      const variants = ['live', 'demo', 'stale', 'future'];
+      qsa(`[data-state="${name}"]`).forEach((el) => {
+        variants.forEach((v) => el.classList.remove(v));
+        if (variant) el.classList.add(variant);
+      });
+    }
+
+    function setStatusDot(name, variant) {
+      const variants = ['ok', 'warn', 'err', 'info'];
+      qsa(`[data-state="${name}"]`).forEach((el) => {
+        variants.forEach((v) => el.classList.remove(v));
+        if (variant) el.classList.add(variant);
+      });
+    }
+
+    function setAvailability(name, enabled) {
+      qsa(`[data-state="${name}"]`).forEach((el) => {
+        if ('disabled' in el) {
+          el.disabled = !enabled;
+          el.setAttribute('aria-disabled', String(!enabled));
+        }
+      });
+    }
+
+    function setActionAvailability(action, enabled) {
+      qsa(`[data-action="${action}"]`).forEach((el) => {
+        if ('disabled' in el) {
+          el.disabled = !enabled;
+          el.setAttribute('aria-disabled', String(!enabled));
+        }
+      });
+    }
+
+    function safe(value, fallback = '—') {
+      if (value === null || value === undefined || value === '') return fallback;
+      return String(value);
+    }
+
+    function safeBool(value, fallback = '—') {
+      if (value === null || value === undefined) return fallback;
+      return String(Boolean(value));
+    }
+
+    function safeJson(value, fallback = '—') {
+      if (value === null || value === undefined) return fallback;
+      if (typeof value === 'string') return value;
+      try {
+        return JSON.stringify(value);
+      } catch (error) {
+        return String(value);
+      }
+    }
+
+    function prettyPresetPlan(value) {
+      if (value === null || value === undefined) return 'none';
+      if (value === 'none') return 'none';
+      if (typeof value === 'string') return value;
+      if (Array.isArray(value) && value.length === 0) return 'none';
+      if (typeof value === 'object' && Object.keys(value).length === 0) return 'none';
+      return safeJson(value, 'none');
+    }
+
+    function shortTime(value) {
+      if (!value) return '—';
+      const d = value instanceof Date ? value : new Date(value);
+      if (Number.isNaN(d.getTime())) return String(value);
+      return d.toLocaleTimeString('zh-CN', { hour12: false });
+    }
+
+    function formatTs(value) {
+      if (!value) return '—';
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) return String(value);
+      return d.toLocaleString('zh-CN', { hour12: false });
+    }
+
+    function computeJdMjd(date = new Date()) {
+      const jd = date.getTime() / 86400000 + 2440587.5;
+      const mjd = jd - 2400000.5;
+      return `${jd.toFixed(2)} / ${mjd.toFixed(2)}`;
+    }
+
+    function escapeHtml(text) {
+      return String(text)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    function inferApiBase() {
+      if (location.protocol.startsWith('http')) return location.origin;
+      return 'http://127.0.0.1:8000';
+    }
+
+    function summarizeBgr(channels) {
+      if (!channels || typeof channels !== 'object') return '—';
+      const pick = (name) => channels[name] ?? channels[name.toUpperCase()] ?? {};
+      return ['B', 'G', 'R'].map((name) => (pick(name)?.enabled ? 'on' : 'off')).join(' / ');
+    }
+
+    function summarizeArmedExposure(exposure) {
+      if (!exposure) return 'none';
+      if (typeof exposure === 'string') return exposure;
+      const frameType = exposure.frame_type || exposure.type || exposure.name || 'armed';
+      const expTime = exposure.exp_time_s ?? exposure.exposure_time_s;
+      return expTime != null ? `${frameType} · ${expTime}s` : frameType;
+    }
+
+    function summarizeLastExposure(exposure) {
+      if (!exposure) return 'none';
+      if (typeof exposure === 'string') return exposure;
+      const frameType = exposure.frame_type || exposure.type || exposure.name;
+      const result = exposure.result || exposure.state;
+      return [frameType, result].filter(Boolean).join(' · ') || 'latest';
+    }
+
+    function detectObservationState(obs, statusFull) {
+      return safe(obs?.state ?? statusFull?.observation?.state, '—');
+    }
+
+    function capabilityMeaning(key, value) {
+      if (value === true) return 'live control';
+      if (key === 'guider') return 'page visible, mark as demo / future';
+      if (key === 'science_channels_bgr' || key === 'slit_monitor_camera') return 'page visible, mark as demo / not wired';
+      if (key === 'fast_photometry') return 'do not expose as active workflow';
+      return 'not enabled';
+    }
+
+    function getCurrentTheme() {
+      return root.classList.contains('theme-light') ? 'light' : 'dark';
+    }
+
+    function applyTheme(mode) {
+      const next = mode === 'light' ? 'light' : 'dark';
+      root.classList.toggle('theme-light', next === 'light');
+      root.classList.toggle('theme-dark', next !== 'light');
+      bindText('diag.settings.theme', next);
+
+      if (themeSwitch) {
+        themeSwitch.setAttribute('aria-pressed', String(next === 'light'));
+        themeSwitch.setAttribute('title', next === 'light' ? '当前为白天模式，点击切换到夜间模式' : '当前为夜间模式，点击切换到白天模式');
+      }
+
+      try {
+        localStorage.setItem(THEME_KEY, next);
+        if (localStorage.getItem(THEME_LEGACY) != null) localStorage.removeItem(THEME_LEGACY);
+      } catch (e) {
+      }
+    }
+
+    function setSystemMessage({ level = 'info', text = '', label, badge } = {}) {
+      if (!systemMessageRail) return;
+
+      const nextLevel = ['info', 'success', 'warning', 'error'].includes(level) ? level : 'info';
+      const nextLabel = label || ({ info: 'Info', success: 'Success', warning: 'Warning', error: 'Error' }[nextLevel]);
+      const nextBadge = badge || ({ info: 'INFO', success: 'OK', warning: 'WARN', error: 'ERROR' }[nextLevel]);
+
+      systemMessageRail.dataset.level = nextLevel;
+      if (systemMessageLevel) systemMessageLevel.textContent = nextLabel;
+      if (systemMessageText) systemMessageText.textContent = text || '系统消息区占位。';
+
+      if (systemMessageBadge) {
+        systemMessageBadge.textContent = nextBadge;
+        systemMessageBadge.className = 'state-badge';
+        if (nextLevel === 'info') systemMessageBadge.classList.add('future');
+        if (nextLevel === 'success') systemMessageBadge.classList.add('live');
+        if (nextLevel === 'warning') systemMessageBadge.classList.add('demo');
+        if (nextLevel === 'error') systemMessageBadge.classList.add('stale');
+      }
+    }
+
+    function activateTabSet(buttons, panels, nameKey, targetName) {
+      buttons.forEach((btn) => {
+        const active = btn.dataset[nameKey] === targetName;
+        btn.classList.toggle('active', active);
+        btn.setAttribute('aria-selected', String(active));
+        btn.setAttribute('tabindex', active ? '0' : '-1');
+      });
+
+      panels.forEach((panel) => {
+        const active = panel.dataset[nameKey] === targetName;
+        panel.classList.toggle('active', active);
+        panel.hidden = !active;
+      });
+    }
+
+    function activatePage(name) {
+      activateTabSet(pageButtons, pages, 'page', name);
+    }
+
+    function activateSubpage(name) {
+      activateTabSet(subpageButtons, subpages, 'subpage', name);
+    }
+
+    function bindTabKeyboard(buttons, activateFn, nameKey) {
+      buttons.forEach((btn, index) => {
+        btn.addEventListener('keydown', (event) => {
+          const last = buttons.length - 1;
+          let nextIndex = null;
+          switch (event.key) {
+            case 'ArrowRight':
+            case 'ArrowDown':
+              nextIndex = index === last ? 0 : index + 1;
+              break;
+            case 'ArrowLeft':
+            case 'ArrowUp':
+              nextIndex = index === 0 ? last : index - 1;
+              break;
+            case 'Home':
+              nextIndex = 0;
+              break;
+            case 'End':
+              nextIndex = last;
+              break;
+            case 'Enter':
+            case ' ':
+              event.preventDefault();
+              activateFn(btn.dataset[nameKey]);
+              btn.focus();
+              return;
+            default:
+              return;
+          }
+          event.preventDefault();
+          const nextBtn = buttons[nextIndex];
+          activateFn(nextBtn.dataset[nameKey]);
+          nextBtn.focus();
+        });
+      });
+    }
+
+    async function sleep(ms) {
+      return new Promise((resolve) => window.setTimeout(resolve, ms));
+    }
+
+    async function fetchWithTimeout(url, init = {}, { timeoutMs } = {}) {
+      const controller = new AbortController();
+      let didTimeout = false;
+      const timeoutId = window.setTimeout(() => {
+        didTimeout = true;
+        controller.abort();
+      }, timeoutMs);
+
+      try {
+        const response = await fetch(url, { ...init, signal: controller.signal });
+        return response;
+      } catch (error) {
+        if (didTimeout && error && typeof error === 'object') error.__justTimeout = true;
+        throw error;
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
+    }
+
+    async function parseResponsePayload(response) {
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        try {
+          return await response.json();
+        } catch (error) {
+          return null;
+        }
+      }
+
+      const text = await response.text();
+      return text || null;
+    }
+
+    function formatResponseErrorMessage(response, payload, fallbackPath) {
+      const detail = payload?.detail;
+      const requestId = response.headers.get('X-Request-ID')
+        || (typeof detail === 'object' ? detail?.request_id : null)
+        || payload?.request_id
+        || null;
+
+      const baseMessage = typeof detail === 'string'
+        ? detail
+        : detail?.message || payload?.message || `${response.status} ${response.statusText}`;
+
+      return requestId ? `${baseMessage} [request_id: ${requestId}]` : baseMessage;
+    }
+
+    function normalizeThrownError(error, fallbackMessage) {
+      if (error instanceof Error && error.message) return error;
+      return new Error(fallbackMessage || String(error));
+    }
+
+    async function fetchJson(path) {
+      const url = path.startsWith('http') ? path : `${APP.apiBase}${path}`;
+      const timeoutMs = APP.http?.getTimeoutMs || 3500;
+      const retries = APP.http?.getRetryCount || 0;
+      const retryDelayMs = APP.http?.getRetryDelayMs || 250;
+
+      let attempt = 0;
+      let lastError = null;
+
+      while (attempt <= retries) {
+        const t0 = performance.now();
+
+        try {
+          const response = await fetchWithTimeout(
+            url,
+            { cache: 'no-store' },
+            { timeoutMs },
+          );
+          const rtt = performance.now() - t0;
+          const payload = await parseResponsePayload(response);
+
+          if (!response.ok) {
+            const message = formatResponseErrorMessage(response, payload, path);
+            const retryable = response.status >= 500 && attempt < retries;
+            if (retryable) {
+              attempt += 1;
+              await sleep(retryDelayMs);
+              continue;
+            }
+            throw new Error(message);
+          }
+
+          return { data: payload, rtt };
+        } catch (error) {
+          const normalized = normalizeThrownError(error, `GET ${path} 请求失败。`);
+          const timedOut = Boolean(error?.__justTimeout);
+          const networkLike = timedOut || normalized.name === 'TypeError';
+
+          if (networkLike && attempt < retries) {
+            attempt += 1;
+            await sleep(retryDelayMs);
+            continue;
+          }
+
+          if (timedOut) {
+            lastError = new Error(`GET ${path} 请求超时（${timeoutMs} ms）。`);
+          } else {
+            lastError = normalized;
+          }
+          break;
+        }
+      }
+
+      throw lastError || new Error(`GET ${path} 请求失败。`);
+    }
+
+    async function postJson(path, body) {
+      const url = path.startsWith('http') ? path : `${APP.apiBase}${path}`;
+      const timeoutMs = APP.http?.postTimeoutMs || 8000;
+
+      try {
+        const response = await fetchWithTimeout(
+          url,
+          {
+            method: 'POST',
+            headers: body !== undefined ? { 'Content-Type': 'application/json' } : {},
+            body: body !== undefined ? JSON.stringify(body) : undefined,
+          },
+          { timeoutMs },
+        );
+
+        const payload = await parseResponsePayload(response);
+
+        if (!response.ok) {
+          throw new Error(formatResponseErrorMessage(response, payload, path));
+        }
+
+        return payload;
+      } catch (error) {
+        if (error?.__justTimeout) {
+          throw new Error(`POST ${path} 请求超时（${timeoutMs} ms）。`);
+        }
+        throw normalizeThrownError(error, `POST ${path} 请求失败。`);
+      }
+    }
+
+    function renderHeader(health, rtt) {
+      const now = new Date();
+      bindText('clock.local', now.toLocaleTimeString('zh-CN', { hour12: false }));
+      bindText('clock.utc', now.toLocaleTimeString('zh-CN', { hour12: false, timeZone: 'UTC' }));
+      bindText('clock.date', now.toISOString().slice(0, 10));
+      bindText('clock.jdMjd', computeJdMjd(now));
+      bindText('api.base', APP.apiBase);
+      bindText('conn.poll', `${(APP.pollMs / 1000).toFixed(1)} s`);
+      bindText('conn.staleThreshold', `${APP.staleThresholdSec.toFixed(1)} s`);
+      if (rtt != null) bindText('conn.rtt', `${Math.round(rtt)} ms`);
+      if (APP.lastOkAt) bindText('conn.last_ok', shortTime(APP.lastOkAt));
+
+      if (!health) {
+        bindText('conn.state', 'Offline');
+        bindText('runtime.mode', '—');
+        setStatusDot('conn.dot', 'err');
+        return;
+      }
+
+      bindText('conn.state', health.ok ? 'Connected' : 'Degraded');
+      bindText('runtime.mode', safe(health.runtime?.run_mode, '—'));
+      setStatusDot('conn.dot', health.ok ? 'ok' : 'warn');
+    }
+
+    function renderOverview(statusFull, observationStatus) {
+      if (!statusFull) return;
+
+      const observation = observationStatus || {};
+      const meta = observation.observation_meta || {};
+      const lastExposure = observation.last_exposure || {};
+      const calibration = statusFull.calibration || {};
+      const detector = statusFull.detector_config || {};
+      const state = statusFull.state || {};
+      const obsState = detectObservationState(observationStatus, statusFull);
+
+      bindText('overview.observation.state', obsState);
+      bindText('overview.observation.armed', summarizeArmedExposure(observation.armed_exposure));
+      bindText('overview.observation.lastExposure', summarizeLastExposure(lastExposure));
+      bindText('overview.observation.result', safe(lastExposure.result ?? observation.result, '—'));
+
+      bindText('overview.calibration.mode', safe(calibration.mode, '—'));
+      bindText('overview.calibration.lamp', safe(calibration.active_lamp, 'none'));
+      bindText('overview.calibration.enabled', safeBool(calibration.lamp_enabled ?? calibration.enabled));
+      bindText('overview.calibration.mirror', safeBool(calibration.mirror_inserted));
+
+      const slitWidth = state.slit_width_um;
+      const slitAngle = state.slit_angle_deg;
+      bindText('overview.slitDetector.summary', `${slitWidth != null ? slitWidth : '—'} μm · ${slitAngle != null ? slitAngle : '—'}°`);
+      bindText('overview.slitDetector.profile', safe(detector.profile_name, '—'));
+      bindText('overview.slitDetector.bgr', summarizeBgr(detector.channels));
+      bindText('overview.slitDetector.trigger', safe(detector.trigger_mode, '—'));
+
+      bindText('overview.snapshot.observation.state', obsState);
+      bindText('overview.snapshot.observation.armedExposure', summarizeArmedExposure(observation.armed_exposure));
+      bindText('overview.snapshot.observation.lastExposure', summarizeLastExposure(lastExposure));
+      bindText('overview.snapshot.observation.result', safe(lastExposure.result, '—'));
+      bindText('overview.snapshot.observation.operatorNote', safe(meta.operator_note, 'none'));
+      bindText('overview.snapshot.observation.meta', meta.obs_id || meta.exp_id || 'none');
+
+      bindText('overview.snapshot.instrument.slitWidth', slitWidth != null ? `${slitWidth} μm` : '—');
+      bindText('overview.snapshot.instrument.slitAngle', slitAngle != null ? `${slitAngle}°` : '—');
+      bindText('overview.snapshot.instrument.mode', safe(calibration.mode, '—'));
+      bindText('overview.snapshot.instrument.lamp', calibration.lamp_enabled ? safe(calibration.active_lamp, 'on') : 'off');
+      bindText('overview.snapshot.instrument.profile', safe(detector.profile_name, '—'));
+      bindText('overview.snapshot.instrument.bgr', summarizeBgr(detector.channels));
+
+      bindText('overview.snapshot.preset.appliedPreset', '—');
+      bindText('overview.snapshot.preset.calibrationApplied', '—');
+      bindText('overview.snapshot.preset.slitPlan', '—');
+      bindText('overview.snapshot.preset.slitApplied', '—');
+    }
+
+    function renderSlitReadback(statusFull) {
+      if (!statusFull) return;
+      const state = statusFull.state || {};
+      const widthUm = state.slit_width_um;
+      const angleDeg = state.slit_angle_deg;
+      const ts = statusFull.timestamp_utc;
+
+      bindText('slit.readback.width', widthUm != null ? `${widthUm} μm` : '—');
+      bindText('slit.readback.angle', angleDeg != null ? `${angleDeg}°` : '—');
+      bindText('slit.readback.measured', 'future');
+      bindText('slit.readback.lastUpdate', formatTs(ts));
+
+      if (slitWidthInput && document.activeElement !== slitWidthInput && widthUm != null) {
+        if ((slitWidthUnit?.value || 'um') === 'um') slitWidthInput.value = String(widthUm);
+      }
+      if (slitAngleInput && document.activeElement !== slitAngleInput && angleDeg != null) {
+        slitAngleInput.value = String(angleDeg);
+      }
+    }
+
+    function renderCalibrationState(statusFull, calibrationStatus) {
+      const calibration = calibrationStatus || statusFull?.calibration || {};
+      const ts = statusFull?.timestamp_utc;
+      bindText('calibration.readback.mode', safe(calibration.mode, '—'));
+      bindText('calibration.readback.activeLamp', safe(calibration.active_lamp, 'none'));
+      bindText('calibration.readback.enabled', safeBool(calibration.lamp_enabled));
+      bindText('calibration.readback.mirror', safeBool(calibration.mirror_inserted));
+      bindText('calibration.readback.lastUpdate', formatTs(ts));
+
+      if (calibrationModeSelect && document.activeElement !== calibrationModeSelect && calibration.mode) calibrationModeSelect.value = calibration.mode;
+      if (calibrationLampSelect && document.activeElement !== calibrationLampSelect) {
+        const nextLamp = calibration.active_lamp || 'flat';
+        if (['flat', 'arc_hgar', 'arc_ne'].includes(nextLamp)) calibrationLampSelect.value = nextLamp;
+      }
+    }
+
+    function detectorChannelEnabledInput(channel) {
+      return document.querySelector(`[data-input="detector.channel.${channel}.enabled"]`);
+    }
+
+    function detectorChannelRoleInput(channel) {
+      return document.querySelector(`[data-input="detector.channel.${channel}.role"]`);
+    }
+
+    function renderDetectorConfig(detectorConfig, capabilities) {
+      const cfg = detectorConfig || {};
+
+      if (detectorProfileNameInput && document.activeElement !== detectorProfileNameInput) detectorProfileNameInput.value = safe(cfg.profile_name, 'default');
+      if (detectorTriggerModeSelect && document.activeElement !== detectorTriggerModeSelect && cfg.trigger_mode) detectorTriggerModeSelect.value = cfg.trigger_mode;
+      if (detectorReadoutModeInput && document.activeElement !== detectorReadoutModeInput) detectorReadoutModeInput.value = safe(cfg.readout_mode, 'normal');
+
+      const channels = cfg.channels || {};
+      ['B', 'G', 'R'].forEach((channel) => {
+        const channelCfg = channels[channel] || {};
+        const enabledInput = detectorChannelEnabledInput(channel);
+        const roleInput = detectorChannelRoleInput(channel);
+
+        if (enabledInput && document.activeElement !== enabledInput) enabledInput.checked = Boolean(channelCfg.enabled);
+        if (roleInput && document.activeElement !== roleInput) roleInput.value = safe(channelCfg.camera_role, `science_${channel.toLowerCase()}`);
+
+        const liveState = capabilities?.science_channels_bgr ? 'configured / available' : 'DEMO / NOT WIRED';
+        bindText(`detector.channel.${channel}.liveState`, liveState);
+      });
+    }
+
+    function applyObservationButtonState(stateValue) {
+      const state = String(stateValue || '').toLowerCase();
+      APP.lastObservationState = state;
+
+      const canArm =
+        ['ready_to_arm', 'completed', 'aborted', 'discarded', 'failed'].includes(state) &&
+        !APP.observationBusy;
+      const canStart = state === 'armed' && !APP.observationBusy;
+      const canFinish = state === 'exposing' && !APP.observationBusy;
+      const canStopReadout = state === 'exposing' && !APP.observationBusy;
+      const canAbortDiscard = ['armed', 'exposing'].includes(state) && !APP.observationBusy;
+
+      setAvailability('obs.canArm', canArm);
+      setAvailability('obs.canStart', canStart);
+      setAvailability('obs.canFinish', canFinish);
+      setAvailability('obs.canStopReadout', canStopReadout);
+      setAvailability('obs.canAbortDiscard', canAbortDiscard);
+
+      applyObservationMutationGuards(state);
+    }
+
+    function applyObservationMutationGuards(stateValue) {
+      const state = String(stateValue || '').toLowerCase();
+      const lockedByObservation = ['armed', 'exposing'].includes(state);
+      const locked = lockedByObservation || APP.observationBusy;
+      const mutationsEnabled = !locked;
+
+      setAvailability('presets.canApply', mutationsEnabled);
+      setActionAvailability('slit.applyWidth', mutationsEnabled);
+      setActionAvailability('slit.applyAngle', mutationsEnabled);
+      setActionAvailability('calibration.setMode', mutationsEnabled);
+      setActionAvailability('calibration.enableLamp', mutationsEnabled);
+      setActionAvailability('calibration.disableLamp', mutationsEnabled);
+      setActionAvailability('detector.apply', mutationsEnabled);
+      setAvailability('cal.canLegacyLampToggle', mutationsEnabled);
+    }
+
+    function renderObservation(observationStatus) {
+      if (!observationStatus) return;
+      const state = detectObservationState(observationStatus);
+      const meta = observationStatus.observation_meta || {};
+      const lastExposure = observationStatus.last_exposure || {};
+
+      bindText('observation.current.state', state);
+      bindText('observation.current.freshness', APP.lastRefreshAt ? `${((Date.now() - APP.lastRefreshAt) / 1000).toFixed(1)} s` : '—');
+      bindText('observation.current.armedExposure', summarizeArmedExposure(observationStatus.armed_exposure));
+      bindText('observation.current.obsId', safe(meta.obs_id, '—'));
+      bindText('observation.current.expId', safe(meta.exp_id, '—'));
+      bindText('observation.current.operatorNote', safe(meta.operator_note, 'none'));
+      bindText('observation.current.message', safe(meta.state || observationStatus.message || observationStatus.reason, 'idle / waiting'));
+
+      bindText('observation.last.frameType', safe(lastExposure.frame_type, '—'));
+      bindText('observation.last.result', safe(lastExposure.result, '—'));
+      bindText('observation.last.kept', safeBool(lastExposure.kept));
+      bindText('observation.last.earlyStop', safeBool(lastExposure.early_stop));
+      bindText('observation.last.discarded', safeBool(lastExposure.discarded));
+      bindText('observation.last.startedAt', formatTs(lastExposure.started_at));
+      bindText('observation.last.finishedAt', formatTs(lastExposure.finished_at));
+
+      applyObservationButtonState(state);
+    }
+
+    function renderDiagnostics(health, capabilities, statusFull, observationStatus, detectorConfig) {
+      bindText('diag.health.ok', safeBool(health?.ok));
+      bindText('diag.health.service', safe(health?.service, '—'));
+      bindText('diag.health.appName', safe(health?.runtime?.app_name, '—'));
+      bindText('diag.health.runMode', safe(health?.runtime?.run_mode, '—'));
+      bindText('diag.health.startedAt', formatTs(health?.runtime?.started_at));
+      bindText('diag.health.latestJob', health?.runtime?.latest_job ? safe(health.runtime.latest_job.id || health.runtime.latest_job.name, 'available') : 'none');
+
+      const subsystems = health?.runtime?.state?.subsystems || {};
+      const subsystemRows = Object.entries(subsystems).map(([name, item]) => `<tr><td>${escapeHtml(name)}</td><td>${escapeHtml(item?.state ?? '—')}</td><td>${escapeHtml(String(item?.connected ?? '—'))}</td><td>${escapeHtml(item?.message ?? '—')}</td></tr>`).join('');
+      bindHtml('diag.health.subsystemsRows', subsystemRows || '<tr><td colspan="4">—</td></tr>');
+
+      const capabilityRows = Object.entries(capabilities || {}).map(([name, value]) => `<tr><td>${escapeHtml(name)}</td><td>${escapeHtml(String(value))}</td><td>${escapeHtml(capabilityMeaning(name, value))}</td></tr>`).join('');
+      bindHtml('diag.capabilities.rows', capabilityRows || '<tr><td colspan="3">—</td></tr>');
+
+      bindText('diag.raw.bundle', JSON.stringify({ health, status_full: statusFull, observation: observationStatus, capabilities, detector_config: detectorConfig }, null, 2));
+    }
+
+    function renderPresetsCatalog(items) {
+      if (!Array.isArray(items) || !items.length) return;
+      const html = items.map((item) => {
+        const active = item.name === APP.selectedPreset ? ' style="outline: 2px solid var(--accent);"' : '';
+        return `<button class="summary-card" type="button" data-preset-name="${escapeHtml(item.name)}" data-state="presets.card.${escapeHtml(item.name)}"${active}><h3>${escapeHtml(item.name)}</h3><div class="hint">${escapeHtml(item.summary || '—')}</div></button>`;
+      }).join('');
+      bindHtml('presets.catalog', html);
+      updatePresetCardStates();
+    }
+
+    function renderPresetResult(result) {
+      bindText('presets.selected', APP.selectedPreset || '—');
+      if (!result) {
+        bindText('presets.result.appliedPreset', '—');
+        bindText('presets.result.summary', '—');
+        bindText('presets.result.calibrationApplied', '—');
+        bindText('presets.result.slitPlan', '—');
+        bindText('presets.result.slitApplied', '—');
+        return;
+      }
+      bindText('presets.result.appliedPreset', safe(result.applied_preset, '—'));
+      bindText('presets.result.summary', safe(result.summary, '—'));
+      bindText('presets.result.calibrationApplied', safeBool(result.calibration_applied));
+      bindText('presets.result.slitPlan', prettyPresetPlan(result.slit_plan));
+      bindText('presets.result.slitApplied', safeBool(result.slit_applied));
+    }
+
+    function updatePresetCardStates() {
+      qsa('[data-preset-name]').forEach((el) => {
+        const active = el.dataset.presetName === APP.selectedPreset;
+        el.classList.toggle('active', active);
+        el.setAttribute('aria-pressed', String(active));
+      });
+    }
+
+    function updateSourceBadges(statusFullOk, observationOk, capabilities) {
+      setStateBadgeVariant('overview.source.statusFull', statusFullOk ? 'live' : 'stale');
+      setStatusDot('overview.source.statusFull.dot', statusFullOk ? 'ok' : 'err');
+      setStateBadgeVariant('overview.source.observationStatus', observationOk ? 'live' : 'stale');
+      setStatusDot('overview.source.observationStatus.dot', observationOk ? 'ok' : 'err');
+      if (capabilities) {
+        setStateBadgeVariant('cameras.capability', capabilities.science_channels_bgr ? 'live' : 'demo');
+        setStateBadgeVariant('guider.capability', capabilities.guider ? 'live' : 'future');
+      }
+    }
+
+    async function refreshReadOnlyState({ silent = false } = {}) {
+      APP.lastRefreshAt = Date.now();
+
+      const [healthResult, statusFullResult, capabilitiesResult, observationResult, presetsResult, calibrationResult, detectorResult] = await Promise.allSettled([
+        fetchJson('/api/v1/health'),
+        fetchJson('/api/v1/status/full'),
+        fetchJson('/api/v1/capabilities'),
+        fetchJson('/api/v1/observation/status'),
+        fetchJson('/api/v1/presets'),
+        fetchJson('/api/v1/calibration/status'),
+        fetchJson('/api/v1/detector/config'),
+      ]);
+
+      const health = healthResult.status === 'fulfilled' ? healthResult.value.data : null;
+      const statusFull = statusFullResult.status === 'fulfilled' ? statusFullResult.value.data : null;
+      const capabilities = capabilitiesResult.status === 'fulfilled' ? capabilitiesResult.value.data : null;
+      const observationStatus = observationResult.status === 'fulfilled' ? observationResult.value.data : null;
+      const presets = presetsResult.status === 'fulfilled' ? presetsResult.value.data : null;
+      const calibrationStatus = calibrationResult.status === 'fulfilled' ? calibrationResult.value.data : null;
+      const detectorConfig = detectorResult.status === 'fulfilled' ? detectorResult.value.data : null;
+
+      const rttCandidates = [healthResult, statusFullResult, capabilitiesResult, observationResult, calibrationResult, detectorResult]
+        .filter((item) => item.status === 'fulfilled')
+        .map((item) => item.value.rtt);
+      const rtt = rttCandidates.length ? rttCandidates.reduce((sum, value) => sum + value, 0) / rttCandidates.length : null;
+
+      if (health?.ok || statusFull || observationStatus || capabilities || calibrationStatus || detectorConfig) APP.lastOkAt = new Date();
+
+      renderHeader(health, rtt);
+
+      if (statusFull) {
+        renderOverview(statusFull, observationStatus);
+        renderSlitReadback(statusFull);
+        renderCalibrationState(statusFull, calibrationStatus);
+      }
+
+      renderDetectorConfig(detectorConfig || statusFull?.detector_config, capabilities);
+
+      if (observationStatus) renderObservation(observationStatus);
+      else applyObservationButtonState(APP.lastObservationState || '—');
+
+      renderDiagnostics(health, capabilities, statusFull, observationStatus, detectorConfig || statusFull?.detector_config);
+      if (Array.isArray(presets?.items)) renderPresetsCatalog(presets.items);
+      renderPresetResult(APP.lastPresetResult);
+      updateSourceBadges(Boolean(statusFull), Boolean(observationStatus), capabilities);
+
+      const nextState = health?.ok && statusFull && capabilities && observationStatus ? 'ok' : (health || statusFull || capabilities || observationStatus || calibrationStatus || detectorConfig) ? 'partial' : 'offline';
+
+      if (!silent || APP.lastSyncState !== nextState) {
+        if (nextState === 'ok') setSystemMessage({ level: 'success', text: '只读状态已刷新：health / status/full / capabilities / observation/status。', badge: 'SYNC' });
+        else if (nextState === 'partial') setSystemMessage({ level: 'warning', text: '部分接口刷新成功，部分接口失败。请检查后端服务状态。', badge: 'PARTIAL' });
+        else setSystemMessage({ level: 'error', text: '未能读取后端接口，请检查服务是否运行。', badge: 'OFFLINE' });
+      }
+
+      APP.lastSyncState = nextState;
+    }
+
+    function startPolling() {
+      if (APP.timer) clearInterval(APP.timer);
+      APP.timer = window.setInterval(() => {
+        refreshReadOnlyState({ silent: true }).catch((error) => console.error(error));
+      }, APP.pollMs);
+    }
+
+    function collectObservationArmPayload() {
+      const frameType = observationFrameType?.value || 'science';
+      const expTimeS = Number(observationExpTime?.value);
+      const operatorNote = observationOperatorNote?.value?.trim() || '';
+      if (!Number.isFinite(expTimeS) || expTimeS <= 0) throw new Error('exp_time_s 必须是大于 0 的数值。');
+      return { frame_type: frameType, exp_time_s: expTimeS, operator_note: operatorNote };
+    }
+
+    function collectSlitWidthPayload() {
+      const rawValue = Number(slitWidthInput?.value);
+      const unit = slitWidthUnit?.value || 'um';
+      if (!Number.isFinite(rawValue)) throw new Error('狭缝宽度不是有效数字。');
+      let widthUm = rawValue;
+      if (unit === 'arcsec') widthUm = rawValue * SLIT_UM_PER_ARCSEC;
+      if (!(widthUm > 0)) throw new Error('width_um 必须大于 0。');
+      return { width_um: Number(widthUm.toFixed(3)) };
+    }
+
+    function collectSlitAnglePayload() {
+      const angleDeg = Number(slitAngleInput?.value);
+      if (!Number.isFinite(angleDeg)) throw new Error('狭缝角度不是有效数字。');
+      if (angleDeg < -90 || angleDeg > 90) throw new Error('angle_deg 必须在 -90 到 90 之间。');
+      return { angle_deg: angleDeg };
+    }
+
+    function collectCalibrationModePayload() {
+      const mode = calibrationModeSelect?.value || 'science';
+      return { mode };
+    }
+
+    function collectCalibrationLampPayload(enabled) {
+      const lamp = calibrationLampSelect?.value || 'flat';
+      return { lamp, enabled: Boolean(enabled) };
+    }
+
+    function collectDetectorConfigPayload() {
+      return {
+        profile_name: detectorProfileNameInput?.value?.trim() || 'default',
+        trigger_mode: detectorTriggerModeSelect?.value || 'internal',
+        readout_mode: detectorReadoutModeInput?.value?.trim() || 'normal',
+        channels: {
+          B: { enabled: Boolean(detectorChannelEnabledInput('B')?.checked), camera_role: detectorChannelRoleInput('B')?.value?.trim() || 'science_b' },
+          G: { enabled: Boolean(detectorChannelEnabledInput('G')?.checked), camera_role: detectorChannelRoleInput('G')?.value?.trim() || 'science_g' },
+          R: { enabled: Boolean(detectorChannelEnabledInput('R')?.checked), camera_role: detectorChannelRoleInput('R')?.value?.trim() || 'science_r' },
+        },
+      };
+    }
+
+    function resetObservationForm() {
+      if (observationFrameType) observationFrameType.value = 'science';
+      if (observationExpTime) observationExpTime.value = '30.0';
+      if (observationOperatorNote) observationOperatorNote.value = '';
+      setSystemMessage({ level: 'info', text: 'Observation 表单已重置。', badge: 'OBS' });
+    }
+
+    function getObservationConfirmation(action) {
+      if (action === 'observation.abort_discard') {
+        return {
+          level: 'danger',
+          title: '确认 Abort & Discard',
+          message: '这会中止当前观测并丢弃本次数据。该操作不可恢复。是否继续？',
+        };
+      }
+
+      if (action === 'observation.stop_readout') {
+        return {
+          level: 'warning',
+          title: '确认 Stop & Readout',
+          message: '这会提前结束当前曝光，但会保留并读出已获得的数据。是否继续？',
+        };
+      }
+
+      return null;
+    }
+
+    function confirmObservationAction(action) {
+      const spec = getObservationConfirmation(action);
+      if (!spec) return true;
+      const text = `${spec.title}\n\n${spec.message}`;
+      return window.confirm(text);
+    }
+
+    async function handleObservationAction(action) {
+      const configMap = {
+        'observation.arm': { path: '/api/v1/observation/arm', label: 'Arm', buildBody: collectObservationArmPayload },
+        'observation.start': { path: '/api/v1/observation/start', label: 'Start' },
+        'observation.finish': { path: '/api/v1/observation/finish', label: 'Finish' },
+        'observation.stop_readout': { path: '/api/v1/observation/stop_readout', label: 'Stop & Readout' },
+        'observation.abort_discard': { path: '/api/v1/observation/abort_discard', label: 'Abort & Discard' },
+      };
+
+      if (action === 'observation.resetForm') {
+        resetObservationForm();
+        return;
+      }
+
+      const config = configMap[action];
+      if (!config) return;
+
+      if (!confirmObservationAction(action)) {
+        const spec = getObservationConfirmation(action);
+        setSystemMessage({
+          level: spec?.level === 'danger' ? 'warning' : 'info',
+          text: `${spec?.title || '操作'}已取消，未发送请求。`,
+          badge: 'OBS',
+        });
+        return;
+      }
+
+      APP.observationBusy = true;
+      applyObservationButtonState(APP.lastObservationState);
+      setSystemMessage({ level: 'info', text: `${config.label} 请求发送中…`, badge: 'OBS' });
+
+      try {
+        const body = config.buildBody ? config.buildBody() : undefined;
+        await postJson(config.path, body);
+        await refreshReadOnlyState({ silent: true });
+        setSystemMessage({ level: 'success', text: `${config.label} 执行成功。`, badge: 'OBS' });
+      } catch (error) {
+        console.error(error);
+        setSystemMessage({ level: 'error', text: `${config.label} 失败：${error.message}`, badge: 'OBS' });
+      } finally {
+        APP.observationBusy = false;
+        applyObservationButtonState(APP.lastObservationState);
+      }
+    }
+
+    async function handlePresetApply() {
+      if (!APP.selectedPreset) throw new Error('当前没有选中的 preset。');
+      setAvailability('presets.canApply', false);
+      setSystemMessage({ level: 'info', text: `Preset apply 请求发送中：${APP.selectedPreset} ...`, badge: 'PRESET' });
+
+      try {
+        const result = await postJson('/api/v1/presets/apply', { name: APP.selectedPreset });
+        APP.lastPresetResult = result;
+        renderPresetResult(result);
+        await refreshReadOnlyState({ silent: true });
+        setSystemMessage({ level: 'success', text: `Preset apply 成功：${APP.selectedPreset}`, badge: 'PRESET' });
+      } catch (error) {
+        console.error(error);
+        setSystemMessage({ level: 'error', text: `Preset apply 失败：${error.message}`, badge: 'PRESET' });
+        throw error;
+      } finally {
+        applyObservationMutationGuards(APP.lastObservationState);
+      }
+    }
+
+    async function handleSlitWidthApply() {
+      const payload = collectSlitWidthPayload();
+      setSystemMessage({ level: 'info', text: `Slit width 请求发送中：${payload.width_um} μm ...`, badge: 'SLIT' });
+      try {
+        await postJson('/api/v1/slit', payload);
+        await refreshReadOnlyState({ silent: true });
+        setSystemMessage({ level: 'success', text: `Slit width 设置成功：${payload.width_um} μm`, badge: 'SLIT' });
+      } catch (error) {
+        console.error(error);
+        setSystemMessage({ level: 'error', text: `Slit width 设置失败：${error.message}`, badge: 'SLIT' });
+        throw error;
+      }
+    }
+
+    async function handleSlitAngleApply() {
+      const payload = collectSlitAnglePayload();
+      setSystemMessage({ level: 'info', text: `Slit angle 请求发送中：${payload.angle_deg}° ...`, badge: 'SLIT' });
+      try {
+        await postJson('/api/v1/slit_angle', payload);
+        await refreshReadOnlyState({ silent: true });
+        setSystemMessage({ level: 'success', text: `Slit angle 设置成功：${payload.angle_deg}°`, badge: 'SLIT' });
+      } catch (error) {
+        console.error(error);
+        setSystemMessage({ level: 'error', text: `Slit angle 设置失败：${error.message}`, badge: 'SLIT' });
+        throw error;
+      }
+    }
+
+    async function handleCalibrationModeApply() {
+      const payload = collectCalibrationModePayload();
+      setSystemMessage({ level: 'info', text: `Calibration mode 请求发送中：${payload.mode} ...`, badge: 'CAL' });
+      try {
+        await postJson('/api/v1/calibration/mode', payload);
+        await refreshReadOnlyState({ silent: true });
+        setSystemMessage({ level: 'success', text: `Calibration mode 设置成功：${payload.mode}`, badge: 'CAL' });
+      } catch (error) {
+        console.error(error);
+        setSystemMessage({ level: 'error', text: `Calibration mode 设置失败：${error.message}`, badge: 'CAL' });
+        throw error;
+      }
+    }
+
+    async function handleCalibrationLampApply(enabled) {
+      const payload = collectCalibrationLampPayload(enabled);
+      setSystemMessage({ level: 'info', text: `${enabled ? 'Enable' : 'Disable'} lamp 请求发送中：${payload.lamp} ...`, badge: 'CAL' });
+      try {
+        await postJson('/api/v1/calibration/lamp', payload);
+        await refreshReadOnlyState({ silent: true });
+        setSystemMessage({ level: 'success', text: `${enabled ? 'Lamp enabled' : 'Lamp disabled'}：${payload.lamp}`, badge: 'CAL' });
+      } catch (error) {
+        console.error(error);
+        setSystemMessage({ level: 'error', text: `Lamp 控制失败：${error.message}`, badge: 'CAL' });
+        throw error;
+      }
+    }
+
+    async function handleDetectorApply() {
+      const payload = collectDetectorConfigPayload();
+      setSystemMessage({ level: 'info', text: `Detector config 请求发送中：${payload.profile_name} ...`, badge: 'DET' });
+      try {
+        await postJson('/api/v1/detector/config', payload);
+        await refreshReadOnlyState({ silent: true });
+        setSystemMessage({ level: 'success', text: `Detector config 设置成功：${payload.profile_name}`, badge: 'DET' });
+      } catch (error) {
+        console.error(error);
+        setSystemMessage({ level: 'error', text: `Detector config 设置失败：${error.message}`, badge: 'DET' });
+        throw error;
+      }
+    }
+
+    async function handleAction(action) {
+      if (!action) return;
+
+      if (action.startsWith('observation.')) return await handleObservationAction(action);
+      if (action === 'presets.apply') return await handlePresetApply();
+      if (action === 'slit.applyWidth') return await handleSlitWidthApply();
+      if (action === 'slit.applyAngle') return await handleSlitAngleApply();
+      if (action === 'calibration.setMode') return await handleCalibrationModeApply();
+      if (action === 'calibration.enableLamp') return await handleCalibrationLampApply(true);
+      if (action === 'calibration.disableLamp') return await handleCalibrationLampApply(false);
+      if (action === 'detector.apply') return await handleDetectorApply();
+      if (action === 'slit.presetWidth' || action === 'slit.presetAngle') return;
+
+      if (action === 'app.refresh') {
+        try {
+          await refreshReadOnlyState({ silent: false });
+        } catch (error) {
+          console.error(error);
+          setSystemMessage({ level: 'error', text: `刷新失败：${error.message}`, badge: 'ERROR' });
+        }
+        return;
+      }
+
+      if (action === 'nav.presets') {
+        activatePage('presets');
+        setSystemMessage({ level: 'info', text: '已切换到 Presets 页面。', badge: 'NAV' });
+        return;
+      }
+
+      if (action === 'nav.guider') {
+        activatePage('guider');
+        setSystemMessage({ level: 'info', text: '已切换到 Guider 页面。', badge: 'NAV' });
+        return;
+      }
+
+      if (action === 'settings.open') {
+        activatePage('diagnostics');
+        setSystemMessage({ level: 'info', text: 'Settings 当前收口在 Diagnostics 页面。', badge: 'SET' });
+        return;
+      }
+
+      if (action === 'logs.copy') {
+        const text = document.querySelector('[data-bind="diag.raw.bundle"]')?.textContent || '';
+        try {
+          await navigator.clipboard.writeText(text);
+          setSystemMessage({ level: 'success', text: '当前 Raw JSON 已复制到剪贴板。', badge: 'COPY' });
+        } catch (error) {
+          console.error(error);
+          setSystemMessage({ level: 'warning', text: '复制失败，请检查浏览器剪贴板权限。', badge: 'COPY' });
+        }
+      }
+    }
+
+    pageButtons.forEach((btn) => btn.addEventListener('click', () => activatePage(btn.dataset.page)));
+    subpageButtons.forEach((btn) => btn.addEventListener('click', () => activateSubpage(btn.dataset.subpage)));
+
+    bindTabKeyboard(pageButtons, activatePage, 'page');
+    bindTabKeyboard(subpageButtons, activateSubpage, 'subpage');
+
+    if (themeSwitch) {
+      themeSwitch.setAttribute('role', 'button');
+      themeSwitch.addEventListener('click', () => applyTheme(getCurrentTheme() === 'light' ? 'dark' : 'light'));
+    }
+
+    document.addEventListener('click', (event) => {
+      const presetCard = event.target.closest('[data-preset-name]');
+      if (presetCard) {
+        APP.selectedPreset = presetCard.dataset.presetName;
+        bindText('presets.selected', APP.selectedPreset);
+        updatePresetCardStates();
+        setSystemMessage({ level: 'info', text: `已选中 preset：${APP.selectedPreset}`, badge: 'PRESET' });
+        return;
+      }
+
+      const widthPreset = event.target.closest('[data-slit-preset]');
+      if (widthPreset) {
+        if (slitWidthInput) slitWidthInput.value = String(widthPreset.dataset.slitPreset);
+        if (slitWidthUnit) slitWidthUnit.value = 'arcsec';
+        setSystemMessage({ level: 'info', text: `已选择狭缝宽度预设：${widthPreset.dataset.slitPreset}"`, badge: 'SLIT' });
+        return;
+      }
+
+      const anglePreset = event.target.closest('[data-angle-preset]');
+      if (anglePreset) {
+        if (slitAngleInput) slitAngleInput.value = String(anglePreset.dataset.anglePreset);
+        setSystemMessage({ level: 'info', text: `已选择狭缝角度预设：${anglePreset.dataset.anglePreset}°`, badge: 'SLIT' });
+        return;
+      }
+
+      const button = event.target.closest('[data-action]');
+      if (!button) return;
+
+      handleAction(button.dataset.action).catch((error) => {
+        console.error(error);
+        setSystemMessage({ level: 'error', text: `动作执行失败：${error.message}`, badge: 'ERROR' });
+      });
+    });
+
+    applyTheme(getCurrentTheme());
+    activatePage('overview');
+    activateSubpage('inst-slit');
+
+    bindText('api.base', APP.apiBase);
+    bindText('diag.settings.theme', getCurrentTheme());
+    bindText('conn.poll', `${(APP.pollMs / 1000).toFixed(1)} s`);
+    bindText('conn.staleThreshold', `${APP.staleThresholdSec.toFixed(1)} s`);
+
+    refreshReadOnlyState({ silent: false }).catch((error) => {
+      console.error(error);
+      setSystemMessage({ level: 'error', text: `初始化读取失败：${error.message}`, badge: 'ERROR' });
+    });
+
+    startPolling();
+  })();
+</script>
+
+</body>
+</html>
