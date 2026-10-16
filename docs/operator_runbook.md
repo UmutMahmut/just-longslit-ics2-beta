@@ -30,7 +30,13 @@ guide camera degrades the preview without pretending that a real frame exists.
 ## Acquisition and recovery
 
 Each exposure completes/readouts automatically unless JUSTLS_AUTO_READOUT_ENABLED
-is disabled. Sequence steps are started individually by the operator. ZWO Stop
+is disabled. New UI plans default to Auto advance: click Start Step once to run
+the remaining rows. Uncheck before loading for individual starts. This choice
+is frozen in the loaded plan. Pause waits for the current frame; Resume
+continues automatically in auto mode. Existing saved plans and API requests
+without auto_advance retain manual stepping. A restart never starts a plan
+automatically. Use manual stepping when changing physical lamps/illumination
+between rows. ZWO Stop
 & Readout is unsupported and preserves the integration; wait or Abort/discard.
 Premature Finish is rejected without cancelling automatic completion.
 
@@ -72,10 +78,14 @@ local repair branch is runnable in place; no branch switch is needed to test it.
    physical comparison lamp/optical path and acquire Arc separately. No
    simulated lamp command is required in the manual Lhires profile. Block
    light physically for Bias/Dark; this camera has no mechanical shutter.
-3. Load the usual test 1/2/3-second sequence. After each step's automatic readout,
-   Start Step should become enabled again; click it for the next step. The
-   guide image should continue updating.
-4. Expand Camera acquisition settings in Observe. Change gain/offset, Apply,
+3. Leave Auto advance checked, load the usual test 1/2/3-second sequence,
+   and click Start Step once. All three rows should complete, with the guide
+   image continuing to update. Repeat with Auto advance unchecked: each row
+   should wait for Start Step. In auto mode, Pause during a longer exposure
+   should finish that frame and wait; Resume should continue the remaining rows.
+   Abort should stop without starting another row.
+4. Expand/collapse Camera acquisition settings and Raw Command JSON. The left
+   guide/science preview panel should keep its height and spacing. Change gain/offset, Apply,
    and acquire a frame. Read Settings shows effective values. Binning changes
    resize the current ROI unless width/height are explicitly edited. Values are
    SDK-bounded and reset on restart; RAW16 and ROI origin are not editable here.

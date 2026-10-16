@@ -311,3 +311,104 @@ def test_concurrent_sequence_starts_cannot_start_the_same_step_twice() -> None:
     assert sorted(result.ok for result in results) == [False, True]
     assert service.status().active_exposure is True
     assert service.status().active_step.phase == "exposing"
+
+
+def test_auto_advance_commits_frame_before_starting_next(monkeypatch) -> None:
+    service = _service()
+    plan = _science_plan().model_copy(update={"auto_advance": True})
+    service.load(plan)
+    assert service.start().ok
+    persisted = []
+    original = service._persist
+    def remember(snapshot):
+        original(snapshot)
+        persisted.append((snapshot.current_index, snapshot.active_exposure))
+    monkeypatch.setattr(service, "_persist", remember)
+    result = service.finish_step()
+    assert result.ok
+    assert (1, False) in persisted
+    assert persisted.index((1, False)) < persisted.index((1, True))
+    assert result.sequence.current_index == 1
+    assert result.sequence.active_exposure
+    assert service.finish_step().sequence.state == SequenceExecutionState.COMPLETED
+
+
+def test_auto_advance_pause_resume_and_abort() -> None:
+    service = _service()
+    service.load(_science_plan().model_copy(update={"auto_advance": True}))
+    service.start()
+    service.pause()
+    paused = service.finish_step().sequence
+    assert paused.state == SequenceExecutionState.PAUSED
+    assert not paused.active_exposure
+    assert service.resume().sequence.active_exposure
+    aborted = service.abort().sequence
+    assert aborted.state == SequenceExecutionState.ABORTED
+    assert not aborted.active_exposure
+
+
+def test_auto_advance_runs_on_backend_without_browser(monkeypatch) -> None:
+    import time
+    monkeypatch.setenv("JUSTLS_AUTO_READOUT_ENABLED", "1")
+    service = _service()
+    service.load(ObservationPlan(auto_advance=True, exposures=[
+        ExposureSpec(frame_type="bias", exp_time_s=0),
+        ExposureSpec(frame_type="test", exp_time_s=0.02),
+        ExposureSpec(frame_type="test", exp_time_s=0.02),
+    ]))
+    assert service.start().ok
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        with service.runtime.sequence_lock:
+            if service.status().state == SequenceExecutionState.COMPLETED:
+                break
+        time.sleep(0.01)
+    snapshot = service.status()
+    assert snapshot.state == SequenceExecutionState.COMPLETED
+    assert len(snapshot.step_results) == 3
+    assert service.runtime.readout_scheduler.last_error is None
+    service.runtime.shutdown()
+
+
+def test_auto_advance_stops_after_next_start_rejection(monkeypatch) -> None:
+    from justls.ics.kernel.errors import InvalidStateError
+    service = _service()
+    service.load(_science_plan().model_copy(update={"auto_advance": True}))
+    service.start()
+    calls = []
+    def blocked():
+        calls.append(True)
+        raise InvalidStateError("test readiness changed", subsystem="observation_sequence")
+    monkeypatch.setattr(service, "_start", blocked)
+    result = service.finish_step()
+    assert not result.ok
+    assert len(calls) == 1
+    assert result.sequence.current_index == 1
+    assert not result.sequence.active_exposure
+    assert len(result.sequence.step_results) == 1
+
+
+def test_auto_advance_persistence_failure_does_not_start_next(monkeypatch) -> None:
+    from justls.ics.kernel.errors import InvalidStateError
+    service = _service()
+    service.load(_science_plan().model_copy(update={"auto_advance": True}))
+    service.start()
+    def unavailable(snapshot):
+        raise InvalidStateError("test persistence failure", subsystem="observation_sequence")
+    monkeypatch.setattr(service, "_persist", unavailable)
+    result = service.finish_step()
+    assert not result.ok
+    assert result.sequence.current_index == 1
+    assert not result.sequence.active_exposure
+
+
+def test_restored_auto_plan_waits_for_operator_start() -> None:
+    runtime = reset_runtime()
+    setup = get_setup_context_service()
+    store = InMemoryObservationSequenceStore()
+    service = _service_for(runtime, setup=setup, store=store)
+    service.load(_science_plan().model_copy(update={"auto_advance": True}))
+    restored = _service_for(reset_runtime(), setup=setup, store=store).status()
+    assert restored.plan.auto_advance is True
+    assert restored.state == SequenceExecutionState.LOADED
+    assert not restored.active_exposure

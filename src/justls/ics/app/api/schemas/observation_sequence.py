@@ -19,6 +19,7 @@ class ObservationPlanReq(BaseModel):
     target_name: str | None = None
     exposures: list[ExposureSpecReq] = Field(..., min_length=1, max_length=100)
     operator_note: str | None = None
+    auto_advance: bool = False
     save_requested: bool = False
     setup_context: dict[str, Any] | None = None
 
@@ -27,6 +28,7 @@ class ObservationPlanReq(BaseModel):
             "target_name": self.target_name,
             "exposures": [spec.to_domain() for spec in self.exposures],
             "operator_note": self.operator_note,
+            "auto_advance": self.auto_advance,
             "save_requested": self.save_requested,
             "setup_context": self.setup_context,
         }

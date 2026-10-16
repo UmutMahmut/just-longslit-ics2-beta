@@ -7,8 +7,10 @@ const buttons = new Map();
 function button() { return {dataset:{},disabled:true,listeners:{},setAttribute(){},addEventListener(name,fn){this.listeners[name]=fn;}}; }
 for (const name of ['preview','load','start','finish-step','stop-readout-step','pause','resume','retry-current-step','mark-failed','abort']) buttons.set('sequence-'+name,button());
 const save = {checked:false,dataset:{},addEventListener(){}};
+const autoAdvance = {checked:true,disabled:false};
 const planInput = {value:'bias,0,zero\ndark,1,dark',dataset:{},addEventListener(){}};
 const panel = {setAttribute(){},querySelector(selector) {
+ if (selector.includes('sequence-auto-advance')) return autoAdvance;
  if (selector.includes('sequence-plan-steps')) return planInput;
  const match = selector.match(/data-action="([^"]+)"/); return match ? buttons.get(match[1]) : null;
 },querySelectorAll(){return [...buttons.values()];}};
@@ -36,5 +38,12 @@ const flush=()=>new Promise(resolve=>setImmediate(resolve));
   assert.equal(buttons.get('sequence-start').disabled,index===2,'next step becomes available after backend auto-readout');
  }
  assert.ok(requests.filter(request=>request.url.endsWith('/status')).length>=4);
+ autoAdvance.checked=true;
+ buttons.get('sequence-preview').listeners.click(); await flush();
+ assert.equal(JSON.parse(requests.at(-1).body).auto_advance,true);
+ autoAdvance.checked=false;
+ buttons.get('sequence-load').listeners.click(); await flush();
+ assert.equal(JSON.parse(requests.at(-1).body).auto_advance,false);
+
  console.log('Sequence browser state regression passed: three steps unlock via background polling');
 })().catch(error=>{console.error(error);process.exitCode=1;});

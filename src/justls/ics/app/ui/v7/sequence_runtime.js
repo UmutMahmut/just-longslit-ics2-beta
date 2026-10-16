@@ -1,4 +1,4 @@
-// v7 multi-exposure sequence runtime. Simulator-first and operator-stepped.
+// v7 multi-exposure sequence runtime. Automatic or operator-stepped.
 
 (function () {
   "use strict";
@@ -97,12 +97,14 @@
       return { frame_type: frameType, exp_time_s: expTime, label: labelParts.join(",") || null };
     });
     const save = saveControl();
-    return { exposures, save_requested: Boolean(save && save.checked) };
+    const auto = host && host.querySelector('[data-role="sequence-auto-advance"]');
+    return { exposures, auto_advance: Boolean(auto && auto.checked), save_requested: Boolean(save && save.checked) };
   }
 
   function plansMatch(left, right) {
     if (!left || !right || !Array.isArray(left.exposures) || !Array.isArray(right.exposures)) return false;
     const normalize = (plan) => ({
+      auto_advance: Boolean(plan.auto_advance),
       save_requested: Boolean(plan.save_requested),
       exposures: plan.exposures.map((exposure) => ({
         frame_type: exposure.frame_type,
@@ -210,6 +212,11 @@
     const state = snapshot && snapshot.state;
     const active = Boolean(snapshot && snapshot.active_exposure);
     const terminal = ["completed", "aborted", "failed"].includes(state);
+    const auto = host.querySelector('[data-role="sequence-auto-advance"]');
+    if (auto) {
+      auto.disabled = runtime.busy || sequenceLocked();
+      if (sequenceLocked()) auto.checked = Boolean(snapshot.plan.auto_advance);
+    }
     const abortConfirmed = Boolean(host.querySelector('[data-role="sequence-abort-confirm"]:checked'));
     const markFailedConfirmed = Boolean(host.querySelector('[data-role="sequence-mark-failed-confirm"]:checked'));
     const recovery = snapshot && snapshot.recovery;

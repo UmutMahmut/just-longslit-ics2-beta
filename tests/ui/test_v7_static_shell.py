@@ -207,3 +207,14 @@ def test_v7_default_shell_exposes_unified_command_feedback_static_bindings():
     assert 'data-bind="v7.sequence.summary"' in response.text
     assert 'data-bind="v7.diagnostics.data_provenance"' in response.text
     assert 'data-bind="v7.diagnostics.latest_fits"' in response.text
+
+
+def test_observe_preview_does_not_stretch_with_controls() -> None:
+    from pathlib import Path
+    html = Path("src/justls/ics/app/ui/ui_operational_v7.html").read_text(encoding="utf-8")
+    panel = html.split(".observe-camera-panel {", 1)[1].split("}", 1)[0]
+    assert "align-self: start;" in panel
+    assert "660px" not in panel and "440px" not in panel
+    assert '.observe-camera-panel > .panel-body { flex: 0 0 auto;' in html
+    assert '.observe-camera-stack { display: flex; flex-direction: column; justify-content: flex-start;' in html
+    assert 'data-role="sequence-auto-advance" checked' in html

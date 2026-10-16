@@ -1,3 +1,21 @@
+## Sequence auto advance and compact Observe layout — 2026-10-16
+
+The current local repair branch adds a default-checked Auto advance option for
+new UI plans. It is frozen on load; legacy persisted plans and API requests
+without the option keep manual stepping. Completed frame state is persisted
+before the next start. Pause, abort, failed starts and persistence failures stop
+progression; restoring a plan never starts it automatically. Resume in auto mode
+continues the next row. Use manual mode for physical illumination changes.
+
+Observe camera views now size to their content independently of the controls,
+with shorter guide and B/G/R previews. Expanding acquisition settings or Raw
+Command JSON no longer stretches the camera panel. Actual browser appearance
+still needs operator acceptance; this change was verified through CSS assertions,
+local JavaScript runtime checks and backend tests, without taking the cameras.
+
+Validation: **448 automated tests passed**. Changes remain on the local repair
+branch pending manual acceptance before integration with main.
+
 # Project Status
 
 ## Manual-observation feedback repairs (2026-10-16)

@@ -99,6 +99,8 @@ class ObservationPlan(BaseModel):
     target_name: str | None = None
     exposures: list[ExposureSpec] = Field(..., min_length=1, max_length=100)
     operator_note: str | None = None
+    # Legacy persisted plans remain operator-stepped. New UI plans opt in.
+    auto_advance: bool = False
     save_requested: bool = False
     setup_context: dict[str, Any] | None = None
 

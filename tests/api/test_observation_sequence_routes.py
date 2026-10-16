@@ -225,3 +225,18 @@ def test_corrupt_durable_sequence_state_blocks_direct_exposure_commands() -> Non
     assert data["status"] == "blocked"
     assert data["error"]["code"] == "interlock_blocked"
     assert "sequence_persistence_error" in data["error"]["details"]
+
+
+def test_sequence_api_preserves_auto_advance_option() -> None:
+    client = TestClient(app)
+    payload = _plan_payload()
+    payload["auto_advance"] = True
+    loaded = client.post("/api/v1/observation/sequence/load", json=payload)
+    assert loaded.status_code == 200
+    assert loaded.json()["sequence"]["plan"]["auto_advance"] is True
+    assert client.post("/api/v1/observation/sequence/start").json()["ok"]
+    completed = client.post("/api/v1/observation/sequence/finish_step").json()
+    assert completed["ok"]
+    assert completed["sequence"]["current_index"] == 1
+    assert completed["sequence"]["active_exposure"]
+    assert client.post("/api/v1/observation/sequence/abort").json()["ok"]

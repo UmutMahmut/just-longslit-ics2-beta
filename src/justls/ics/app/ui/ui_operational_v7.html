@@ -167,14 +167,14 @@
     .channel-card h3 { margin: 0; padding: 7px 9px; border-bottom: 1px solid var(--border-soft); background: #f8fafc; color: var(--text); }
     .channel-card .panel-body { padding: 9px; }
     .observe-camera-panel {
-      --observe-slit-height: 660px;
-      --observe-bgr-height: 440px;
+      --observe-slit-height: clamp(240px, 30vw, 360px);
+      --observe-bgr-height: clamp(150px, 18vw, 220px);
       display: flex;
       flex-direction: column;
-      align-self: stretch;
+      align-self: start;
     }
-    .observe-camera-panel > .panel-body { flex: 1; min-height: 0; }
-    .observe-camera-stack { display: flex; flex-direction: column; justify-content: space-between; gap: 12px; }
+    .observe-camera-panel > .panel-body { flex: 0 0 auto; min-height: 0; }
+    .observe-camera-stack { display: flex; flex-direction: column; justify-content: flex-start; gap: 12px; }
     .observe-camera-section { flex: 0 0 auto; min-height: 0; }
     .preview-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; margin-bottom: 7px; }
     .preview-heading h3 { margin: 0; }
@@ -707,7 +707,8 @@
 
                 <section class="subpanel" role="tabpanel" data-role="v7-observe-sequence-panel" data-observe-mode-panel="sequence" hidden>
                   <h3>Exposure Sequence</h3>
-                  <p style="margin: 0; color: var(--muted); font-size: 12px;">Enter one exposure per line: <code>frame_type,seconds,label</code>. Click Start Step for each exposure; each step reads out automatically. The Save setting is frozen when the plan is loaded. Bias supports 0 s.</p>
+                  <label><input type="checkbox" style="width: auto;" data-role="sequence-auto-advance" checked> Auto advance to next exposure (fixed when loaded)</label>
+                  <p style="margin: 0; color: var(--muted); font-size: 12px;">Enter one exposure per line: <code>frame_type,seconds,label</code>. Click Start Step to begin. Auto advance runs the remaining rows; uncheck it for manual stepping. Each step reads out automatically. The Save setting is frozen when the plan is loaded. Bias supports 0 s.</p>
                   <label style="margin-top: 8px;">Plan Steps<textarea data-role="sequence-plan-steps" rows="4">science,5,science-1
 science,5,science-2</textarea></label>
                   <div class="badge-row" style="margin-top: 8px;">

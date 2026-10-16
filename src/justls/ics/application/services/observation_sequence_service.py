@@ -52,7 +52,7 @@ class ObservationSequenceService:
 
     A step is read out automatically once its requested integration time has
     elapsed (hardware exposures cannot wait for an operator to click
-    "finish"); the operator still starts the next step explicitly.
+    "finish"); plans can advance automatically or wait for the operator.
     """
 
     def __init__(
@@ -229,6 +229,14 @@ class ObservationSequenceService:
             job.job_id,
             result={"sequence": snapshot.to_status_dict()},
         )
+        # Commit the completed frame / resume state before touching the next
+        # exposure. The same transition lock protects pause, abort and shutdown.
+        # Start failures are returned and never retried automatically.
+        if (command in {"finish_step", "stop_readout_step", "resume"}
+                and snapshot.plan.auto_advance
+                and snapshot.state == SequenceExecutionState.RUNNING
+                and not snapshot.active_exposure):
+            return self._execute_locked("start", self._start)
         return SequenceCommandResult(
             command=command,
             ok=True,

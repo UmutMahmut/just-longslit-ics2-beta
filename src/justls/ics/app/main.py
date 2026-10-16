@@ -138,7 +138,7 @@ UI_V7_OBSERVE_RUNTIME = "/ui-assets/v7/observe_runtime.js?v=3.3-manual-fixes"
 UI_V7_OBSERVE_GUARD = "/ui-assets/v7/observe_guard.js"
 UI_V7_CAMERA_RUNTIME = "/ui-assets/v7/camera_runtime.js?v=3.3-manual-fixes"
 UI_V7_ACQUISITION_SETTINGS = "/ui-assets/v7/acquisition_settings.js?v=manual-observation-fixes"
-UI_V7_SEQUENCE_RUNTIME = "/ui-assets/v7/sequence_runtime.js?v=3.3-manual-fixes"
+UI_V7_SEQUENCE_RUNTIME = "/ui-assets/v7/sequence_runtime.js?v=3.4-sequence-auto"
 
 PHASE_2D6_V5_ADAPTER_ENABLED_ENV = "JUSTLS_UI_PHASE2D6_ADAPTER_ENABLED"
 PHASE_2D6_V6_ENABLED_ENV = "JUSTLS_UI_V6_ENABLED"
