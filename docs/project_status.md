@@ -21,6 +21,10 @@ explicitly deferred by the operator for this integration milestone.
 - Repairs are developed and verified on `codex/stable-repair` before integration.
   Integration preserves main's history and transplants the verified resulting
   tree, citing the snapshot rather than forcing an unrelated-history merge.
+- Verified integration source commit: `f3f30bc`, descended from the former main.
+  The integration tree was checked equal to repaired snapshot `91db132`.
+  Source history is retained under archive tags `archive/stable-2026-10-15`
+  and `archive/stable-repair-2026-10-16` when retiring the old branches.
 
 ## Verified repairs
 
@@ -99,6 +103,13 @@ A second complete acceptance also passed with a 30 s science integration and
 continuous guide preview, plus the same abort/sequence/reload/restart checks:
 `var/hardware-acceptance/20261016T032605Z/report.json`. Both successful runs
 saved and independently validated 8 engineering FITS files each.
+
+After transplantation onto main ancestry, the identical integrated source
+passed all 423 tests again. A real Uvicorn HTTP server smoke also passed:
+UI/script routes, health, both camera connections, live guide image, a saved
+real science exposure, science image retrieval, controlled reload and graceful
+shutdown. Local report: `var/http-smoke/20261016T033020Z/report.json`.
+All 11 served JavaScript source files passed Node syntax checks.
 
 ## What this milestone does not certify
 
