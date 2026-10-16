@@ -102,3 +102,30 @@ def test_slit_preview_can_stop_and_resume_without_affecting_science_exposure() -
     second = client.get("/camera/slit/latest.jpg")
     assert first.status_code == second.status_code == 200
     assert int(second.headers["x-ics-frame-sequence"]) == int(first.headers["x-ics-frame-sequence"]) + 1
+
+
+def test_guide_settings_failure_does_not_fault_science_camera(monkeypatch):
+    from justls.ics.kernel.runtime import get_runtime
+    runtime = get_runtime()
+    before = runtime.detector.state
+    def fail(_updates):
+        raise RuntimeError("guide USB failure")
+    monkeypatch.setattr(runtime.slit_camera.driver, "configure_settings", fail)
+    client = TestClient(app)
+    response = client.put("/api/v1/cameras/slit/settings", json={"gain": 10})
+    assert response.status_code == 503
+    assert runtime.detector.state == before
+    assert not runtime.slit_camera.get_status()["preview_enabled"]
+    assert client.get("/api/v1/cameras/status").status_code == 200
+
+
+@pytest.mark.parametrize("failure", [TimeoutError("USB timeout"), OSError("USB removed")])
+def test_guide_operational_failure_is_reported_without_service_error(monkeypatch, failure):
+    from justls.ics.kernel.runtime import get_runtime
+    runtime = get_runtime()
+    def fail():
+        raise failure
+    monkeypatch.setattr(runtime.slit_camera, "get_preview", fail)
+    client = TestClient(app)
+    assert client.get("/camera/slit/latest.jpg").status_code == 503
+    assert client.get("/api/v1/cameras/status").status_code == 200

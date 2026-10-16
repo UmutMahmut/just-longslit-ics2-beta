@@ -1,3 +1,60 @@
+## Stability review and unresolved hardware failure — 2026-10-16
+
+Software validation: **458 automated tests passed**, including injected guide
+USB failure/timeout, suspension and explicit retry, failed abort followed by
+handle close, guide/science fault isolation, frontend request timeout/coalescing,
+and bounded job history. The current local repair branch remains unmerged.
+
+Reviewed acquisition ownership, scheduler cancellation, runtime reload/shutdown,
+SDK call serialization/quarantine, guide capture/settings/status routes, browser
+polling, data publication/recovery and repository artifact hygiene. Existing
+no-overwrite FITS publication, explicit simulator selection, runtime ownership
+and recovery guards remain. No tracked caches/logs/debug artifacts were found.
+
+Changes:
+- Guide preview suspends after three consecutive failures, immediately after
+  failed cleanup, or SDK quarantine; an explicit operator retry resets the count.
+- Science disconnect attempts handle close even if abort raises; guide teardown
+  exceptions are logged rather than silently ignored.
+- A guide settings failure stops preview without faulting the science detector.
+- Guide operational errors return 409/503; status remains independently readable.
+- Frontend camera requests have timeouts, status polls do not overlap, and a
+  failed status request stops new frame requests until a later status succeeds.
+  The same request helper replaces duplicated fetch/error handling. Reload text
+  now matches the backend's active-exposure/sequence rejection.
+- In-memory job history targets 500 records, evicting terminal jobs first while
+  preserving every queued/running job. Disk products/recovery are unaffected.
+- The existing hardware acceptance tool now supports repeated automatic
+  sequences; no separate temporary acquisition tool was added.
+
+Hardware evidence (local ignored reports):
+1. Before reconnect, fresh-process discovery timed out in
+   ASIGetNumOfConnectedCameras after 8 s, while Windows reported both cameras OK.
+   Report: var/resilience-review/hardware/20261016T050437Z/report.json.
+2. After operator USB reconnect, both serials bound. Short/10-second exposures,
+   concurrent guide refresh, Abort A / next exposure B, controlled close/rebind,
+   and manually stepped saved sequences passed. Seven automatic 1/2/3-second
+   cycles completed. Guide frame 90 then returned failed; strict acceptance
+   stopped and closed the runtime. The overall test FAILED, not passed.
+   Report: var/resilience-review/hardware/20261016T050635Z/report.json.
+3. Without another USB reconnect, fresh-process discovery then raised a native
+   access violation. Python reported unavailable cameras and quarantined the
+   SDK; this did not restore the devices. Report:
+   var/resilience-review/reopen/20261016T050946Z/report.json.
+
+Windows driver snapshot: var/resilience-review/pnp-drivers.json (3.28.0.0 for
+both cameras). The original cause is not yet isolated among SDK, driver,
+transport, device and adapter interaction. Do not claim that long-run dual-camera
+stability, USB fault recovery, or device isolation is accepted. A native DLL in
+the server process is still a containment limit; clearing its quarantine or
+adding unlimited retries is not a recovery strategy. Next hardware work should
+capture transfer/control settings and SDK/USB diagnostics in controlled
+single-camera versus dual-camera runs, then evaluate driver transport settings
+or process isolation using evidence. Do not silently alter system drivers.
+
+No test service or camera session is intentionally left running. Operator edits
+to HTML preview height/padding remain untouched and separate from this repair.
+
 ## Sequence auto advance and compact Observe layout — 2026-10-16
 
 The current local repair branch adds a default-checked Auto advance option for

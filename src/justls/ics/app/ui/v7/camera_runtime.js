@@ -15,7 +15,24 @@
     latestScienceExpId: null,
     lastHotplugRender: null,
     frameLoading: false,
+    statusLoading: false,
   };
+
+  async function cameraRequest(url, method, timeoutMs = 15000) {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, {
+        method: method || "GET", headers: { Accept: "application/json" },
+        cache: "no-store", signal: controller.signal,
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail || `HTTP ${response.status}`);
+      return payload;
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }
 
   function setBinding(name, value) {
     document.querySelectorAll(`[data-bind="${name}"]`).forEach((node) => {
@@ -115,13 +132,7 @@
     const toggle = slitToggle();
     if (toggle) toggle.disabled = true;
     try {
-      const response = await fetch(enabled ? START_ENDPOINT : STOP_ENDPOINT, {
-        method: "POST",
-        headers: { Accept: "application/json" },
-        cache: "no-store",
-      });
-      const status = await response.json();
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const status = await cameraRequest(enabled ? START_ENDPOINT : STOP_ENDPOINT, "POST");
       renderSlitStatus(status);
     } catch (error) {
       setBinding("v7.camera.slit.state", `unavailable: ${error && error.message || "request failed"}`);
@@ -131,13 +142,11 @@
   }
 
   async function reloadCameras() {
-    // A reload releases every camera handle and re-binds. During the brief
-    // window any in-flight exposure is aborted; we confirm with the operator
-    // so an accidental click cannot trash a sequence.
+    // The backend rejects reload while an exposure or sequence owns a camera.
     const button = reloadButton();
     const accepted = window.confirm(
       "Reload Cameras will release every camera handle and re-bind to the SDK. " +
-      "Any in-flight exposure will be discarded. Continue?"
+      "Finish or abort any exposure/sequence first. Continue?"
     );
     if (!accepted) return;
     if (button) {
@@ -145,15 +154,7 @@
       const previous = button.textContent;
       button.textContent = "Reloading…";
       try {
-        const response = await fetch(RELOAD_ENDPOINT, {
-          method: "POST",
-          headers: { Accept: "application/json" },
-          cache: "no-store",
-        });
-        if (!response.ok) {
-          const detail = await response.text();
-          throw new Error(`HTTP ${response.status} · ${detail.slice(0, 120)}`);
-        }
+        await cameraRequest(RELOAD_ENDPOINT, "POST", 60000);
         await loadCameraStatus({ force: true });
         button.textContent = "Reloaded ✓";
         window.setTimeout(() => { button.textContent = previous; }, 3000);
@@ -168,21 +169,25 @@
   }
 
   async function loadCameraStatus(options) {
+    if (runtime.statusLoading) return;
+    runtime.statusLoading = true;
     const opts = options || {};
     try {
-      const response = await fetch(STATUS_ENDPOINT, { headers: { Accept: "application/json" }, cache: "no-store" });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = await cameraRequest(STATUS_ENDPOINT);
       renderSlitStatus(payload.slit_camera);
       renderSafeModeBanner(payload.service);
       renderHotPlug(payload.hot_plug);
     } catch (error) {
+      runtime.slitEnabled = false;
+      scheduleSlitFrames();
       setBinding("v7.camera.slit.state", `unavailable: ${error && error.message || "request failed"}`);
       if (opts.force) {
         // When the operator explicitly asks for a reload, surface the
         // failure in the badge so it is not silently swallowed.
         renderHotPlug({ enabled: false, last_error: `status fetch failed: ${error.message}` });
       }
+    } finally {
+      runtime.statusLoading = false;
     }
   }
 

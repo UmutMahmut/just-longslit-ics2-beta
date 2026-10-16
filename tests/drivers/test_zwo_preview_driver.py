@@ -236,3 +236,50 @@ def test_quarantined_sdk_is_not_reported_as_live_preview():
         assert 'restart' in status['error']
     finally:
         driver.disconnect()
+
+
+def test_repeated_failed_frames_suspend_without_further_usb_calls():
+    driver = build_driver()
+    driver.connect()
+    session = driver._fake_session
+    starts = []
+    session.start_exposure = lambda **_: starts.append(True)
+    session.wait_for_exposure = lambda **_: "failed"
+    for _ in range(3):
+        with pytest.raises(RuntimeError, match="failed"):
+            driver.capture_jpeg()
+    assert driver.status()["state"] == "suspended"
+    assert not driver.status()["preview_enabled"]
+    for _ in range(10):
+        with pytest.raises(RuntimeError, match="stopped"):
+            driver.capture_jpeg()
+    assert len(starts) == 3
+    assert driver.status()["failed_frames"] == 3
+    session.wait_for_exposure = lambda **_: "success"
+    driver.start_preview()
+    driver.capture_jpeg()
+    assert driver.status()["consecutive_failures"] == 0
+    assert driver.status()["error"] is None
+    driver.disconnect()
+
+
+def test_cleanup_failure_suspends_on_first_failed_frame():
+    driver = build_driver()
+    driver.connect()
+    driver._fake_session.wait_for_exposure = lambda **_: "failed"
+    def broken_stop():
+        raise RuntimeError("USB stop failed")
+    driver._fake_session.stop_exposure = broken_stop
+    with pytest.raises(RuntimeError, match="failed"):
+        driver.capture_jpeg()
+    assert driver.status()["state"] == "suspended"
+    driver.disconnect()
+
+
+def test_quarantined_preview_cannot_be_reenabled():
+    driver = build_driver()
+    driver.connect()
+    driver.sdk.health_error = "SDK quarantined; restart the service"
+    with pytest.raises(RuntimeError, match="restart"):
+        driver.start_preview()
+    driver.disconnect()

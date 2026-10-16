@@ -119,13 +119,18 @@ class ZwoDetectorDriver:
 
     def disconnect(self) -> None:
         with self._lock:
-            if self._active is not None:
-                self.abort_exposure()
-            context = self._session_context
-            self._session_context = None
-            self._session = None
-            if context is not None:
-                context.__exit__(None, None, None)
+            try:
+                if self._active is not None:
+                    self.abort_exposure()
+            finally:
+                # A failed USB stop must not skip closing the handle. The SDK
+                # gate still prevents close after an unresolved native timeout.
+                context = self._session_context
+                self._active = None
+                self._session_context = None
+                self._session = None
+                if context is not None:
+                    context.__exit__(None, None, None)
 
     def __enter__(self) -> "ZwoDetectorDriver":
         self.connect()

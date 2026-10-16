@@ -249,3 +249,20 @@ def test_status_is_nonblocking_and_performs_no_sdk_io():
         assert driver.get_status()['connected']
     finally:
         driver.disconnect()
+
+
+def test_disconnect_closes_session_even_when_abort_fails():
+    session = FakeZwoSession()
+    driver = ZwoDetectorDriver(FakeZwoSdk(session), descriptor(), camera_config())
+    driver.connect()
+    driver.start_exposure(obs_id="obs", exp_id="exp", exp_time_s=1,
+                          frame_type="test", save_requested=False)
+    def broken_stop():
+        raise RuntimeError("USB stop failed")
+    session.stop_exposure = broken_stop
+    with pytest.raises(RuntimeError, match="USB stop failed"):
+        driver.disconnect()
+    assert session.closed
+    assert driver._session is None
+    assert driver._active is None
+    driver.disconnect()  # repeated shutdown is harmless

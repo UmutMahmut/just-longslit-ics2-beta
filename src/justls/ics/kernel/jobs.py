@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
+from threading import RLock
 from typing import Any
 from uuid import uuid4
 
@@ -151,7 +152,11 @@ class JobRecord:
 
 
 class JobTracker:
-    def __init__(self) -> None:
+    def __init__(self, *, max_history: int = 500) -> None:
+        if max_history < 1:
+            raise ValueError("max_history must be positive")
+        self._lock = RLock()
+        self.max_history = max_history
         self._jobs: dict[str, JobRecord] = {}
         self._order: list[str] = []
 
@@ -162,21 +167,35 @@ class JobTracker:
         state_before: str | None = None,
     ) -> JobRecord:
         job = JobRecord.create(request, state_before=state_before)
-        self._jobs[job.job_id] = job
-        self._order.append(job.job_id)
+        with self._lock:
+            self._jobs[job.job_id] = job
+            self._order.append(job.job_id)
+            # Bound session history without evicting queued/running work.
+            # Full frame products and sequence recovery live outside this cache.
+            for old_id in tuple(self._order):
+                if len(self._order) <= self.max_history:
+                    break
+                if self._jobs[old_id].status in {
+                    JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.ABORTED,
+                }:
+                    del self._jobs[old_id]
+                    self._order.remove(old_id)
         return job
 
     def get_job(self, job_id: str) -> JobRecord | None:
-        return self._jobs.get(job_id)
+        with self._lock:
+            return self._jobs.get(job_id)
 
     def latest_job(self) -> JobRecord | None:
-        if not self._order:
-            return None
-        return self._jobs[self._order[-1]]
+        with self._lock:
+            if not self._order:
+                return None
+            return self._jobs[self._order[-1]]
 
     def list_jobs(self, *, limit: int = 20) -> list[JobRecord]:
-        ids = self._order[-limit:]
-        return [self._jobs[job_id] for job_id in reversed(ids)]
+        with self._lock:
+            ids = self._order[-limit:] if limit > 0 else []
+            return [self._jobs[job_id] for job_id in reversed(ids)]
 
     def mark_running(self, job_id: str) -> JobRecord:
         job = self._require_job(job_id)

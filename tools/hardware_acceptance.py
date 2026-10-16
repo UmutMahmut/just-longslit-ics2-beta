@@ -19,6 +19,7 @@ parser.add_argument('--dll', required=True, type=Path)
 parser.add_argument('--config', type=Path, default=Path('config/cameras.lhires-dual-zwo.example.json'))
 parser.add_argument('--output', type=Path, default=Path('var/hardware-acceptance'))
 parser.add_argument('--long-exposure-s', type=float, default=10)
+parser.add_argument('--sequence-cycles', type=int, default=1, help='Saved automatic 1/2/3-second sequences with concurrent guide previews')
 args = parser.parse_args()
 if not args.hardware:
     parser.error('Pass --hardware to explicitly enable real camera operations')
@@ -26,6 +27,8 @@ if sys.flags.optimize:
     parser.error('Do not use Python -O: acceptance assertions must be enabled')
 if args.long_exposure_s < 2:
     parser.error('--long-exposure-s must be at least 2')
+if not 1 <= args.sequence_cycles <= 1000:
+    parser.error('--sequence-cycles must be between 1 and 1000')
 root=Path(__file__).resolve().parents[1]; os.chdir(root); stamp=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ'); out=args.output.resolve()/stamp; out.mkdir(parents=True)
 os.environ.update(ICS_ZWO_SDK_LIBRARY=str(args.dll.resolve()),ICS_BETA_CAMERA_CONFIG=str(args.config.resolve()),ICS_BETA_DATA_ROOT=str(out/'data'),JUSTLS_SETUP_CONTEXT_PATH=str(out/'setup.json'),JUSTLS_SEQUENCE_STATE_PATH=str(out/'sequence.json'),JUSTLS_INSTRUMENT_CONTEXT_PATH=str(out/'instrument.json'),JUSTLS_AUTO_READOUT_ENABLED='1',ICS_BETA_HOTPLUG_INTERVAL_S='2')
 os.environ.pop('ICS_BETA_FORCE_SIM',None)
@@ -66,7 +69,7 @@ def validate(status):
         assert h['BAYERPAT']=='RGGB'; assert h['EXPTIME']>0
         assert datetime.fromisoformat(h['DATE-END'])>=datetime.fromisoformat(h['DATE-OBS'])
         assert hashlib.sha256(path.read_bytes()).hexdigest()==result['checksum']
-        report['frames'].append({'path':str(path),'shape':data.shape,'dtype':str(data.dtype),'min':int(data.min()),'max':int(data.max()),'mean':float(data.mean()),'requested':h.get('REQTIME'),'actual':h['EXPTIME'],'serial':h['DETSER'],'simulated':h['SIMULATE'],'checksum':result['checksum']})
+        report['frames'].append({'path':str(path),'shape':data.shape,'dtype':str(data.dtype),'min':int(data.min()),'max':int(data.max()),'mean':float(data.mean()),'requested':h.get('EXPREQ'),'actual':h['EXPTIME'],'serial':h['DETSER'],'simulated':h['SIMULATE'],'checksum':result['checksum']})
     check('independent FITS validation',str(path));save_report()
 
 def expose(client,duration,save=True):
@@ -76,7 +79,7 @@ def expose(client,duration,save=True):
 try:
     with TestClient(app) as client:
         cameras=client.get('/api/v1/cameras/status').json(); (out/'cameras.json').write_text(json.dumps(cameras,indent=2))
-        assert cameras['science_camera']['driver']=='zwo' and cameras['science_camera']['connected'],cameras
+        assert cameras['science_camera'] and cameras['science_camera']['driver']=='zwo' and cameras['science_camera']['connected'],cameras
         assert cameras['slit_camera']['driver']=='zwo' and cameras['slit_camera']['connected'],cameras
         check('both hardware cameras bound by serial')
         for duration in (.1,.2,args.long_exposure_s): validate(expose(client,duration))
@@ -107,6 +110,28 @@ try:
             cmd(client,'observation/sequence/start');validate(await_complete(client))
             seq=client.get('/api/v1/observation/sequence/status').json();assert len(seq['step_results'])==i+1,seq
         assert seq['state']=='completed';check('two saved operator-stepped sequence exposures with automatic readout')
+        for cycle in range(args.sequence_cycles):
+            auto_plan = {'save_requested': True, 'auto_advance': True, 'exposures': [
+                {'exp_time_s': seconds, 'frame_type': 'test'} for seconds in (1, 2, 3)
+            ]}
+            cmd(client, 'observation/sequence/load', auto_plan)
+            cmd(client, 'observation/sequence/start')
+            deadline = time.monotonic() + 60
+            while time.monotonic() < deadline:
+                preview = client.get('/camera/slit/latest.jpg')
+                assert preview.status_code == 200, preview.text
+                assert client.get('/api/v1/status/full').status_code == 200
+                seq = client.get('/api/v1/observation/sequence/status').json()
+                if seq['state'] == 'completed':
+                    break
+                assert seq['state'] == 'running', seq
+                time.sleep(.3)
+            assert seq['state'] == 'completed' and len(seq['step_results']) == 3, seq
+            validate(client.get('/api/v1/observation/status').json())
+            check('automatic sequence cycle completed', cycle + 1)
+        guide = client.get('/api/v1/cameras/status').json()['slit_camera']
+        assert guide.get('failed_frames', 0) == 0, guide
+        report['guide_after_sequences'] = guide
         validate(expose(client,.1))
         old=get_runtime();cmd(client,'observation/arm',{'exp_time_s':3,'frame_type':'test','save_requested':False});cmd(client,'observation/start')
     assert old.closed and not old.readout_scheduler.active

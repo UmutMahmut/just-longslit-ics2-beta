@@ -292,7 +292,7 @@ class Runtime:
                 try:
                     disconnect()
                 except Exception:
-                    pass
+                    logger.exception("guide camera disconnect failed")
 
     def get_camera_status_dict(self) -> dict[str, Any]:
         science = (

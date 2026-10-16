@@ -136,7 +136,7 @@ UI_V7_INSTRUMENT_RUNTIME = "/ui-assets/v7/instrument_runtime.js?v=3.0-transition
 UI_V7_PRESET_RUNTIME = "/ui-assets/v7/preset_runtime.js"
 UI_V7_OBSERVE_RUNTIME = "/ui-assets/v7/observe_runtime.js?v=3.3-manual-fixes"
 UI_V7_OBSERVE_GUARD = "/ui-assets/v7/observe_guard.js"
-UI_V7_CAMERA_RUNTIME = "/ui-assets/v7/camera_runtime.js?v=3.3-manual-fixes"
+UI_V7_CAMERA_RUNTIME = "/ui-assets/v7/camera_runtime.js?v=3.5-camera-resilience"
 UI_V7_ACQUISITION_SETTINGS = "/ui-assets/v7/acquisition_settings.js?v=manual-observation-fixes"
 UI_V7_SEQUENCE_RUNTIME = "/ui-assets/v7/sequence_runtime.js?v=3.4-sequence-auto"
 

@@ -99,3 +99,58 @@ approximate time before restarting/reloading cameras:
 ```powershell
 Get-Content .\var\logs\ics-beta.log -Tail 120
 ```
+
+
+## Adjust preview heights
+
+Edit `src/justls/ics/app/ui/ui_operational_v7.html`, inside
+`.observe-camera-panel` (search for `--observe-slit-height`). The original
+compact defaults are:
+
+```css
+--observe-slit-height: clamp(240px, 30vw, 360px);
+--observe-bgr-height: clamp(150px, 18vw, 220px);
+```
+
+`clamp(minimum, preferred, maximum)` limits the preferred value between two
+bounds. `30vw` means 30 percent of the browser viewport width, not of the left
+panel. To use fixed heights instead, use e.g. `480px` and `320px`. The B/G/R
+value applies to each of the three images, which share a row on wide screens.
+No Python or JavaScript change is needed; save the HTML and Ctrl-F5 the page.
+
+At viewport widths of 1180px or less, the media query near the end of the style
+block overrides these values: slit height `clamp(220px, 42vw, 360px)` and each
+science image `clamp(130px, 18vw, 210px)`. Adjust those rules too if testing in a
+narrow browser window. Keep `align-self: start` and the stack's
+`justify-content: flex-start` to preserve independence from right-side details.
+
+## Preview failure recovery
+
+A single failed guide frame is discarded and the next refresh may recover.
+Three consecutive failures, a failed stop/cleanup, or a quarantined SDK suspend
+preview acquisition. Status shows the error and failure count. Fix the physical
+condition first, then check the preview toggle to retry. A healthy frame clears
+the consecutive count. Do not repeatedly enable a camera that keeps failing.
+
+Guide-only settings failure stops preview without marking science as failed.
+A shared native SDK quarantine still affects both roles and requires a graceful
+service restart; a fresh process that also times out during discovery indicates
+that restarting Python alone has not restored the device/driver state.
+
+For extended bench testing with the server and ASI applications stopped:
+
+```powershell
+python tools/hardware_acceptance.py --hardware --dll "F:/ASIStudio/ASICamera2.dll" --sequence-cycles 8
+```
+
+This reuses the standard acceptance tool and writes its frames and report under
+`var/hardware-acceptance`. It includes saved automatic sequences with concurrent
+guide frames/status checks, controlled camera reload, abort, and lifespan
+shutdown/reopen. Failure-injection tests for broken USB cleanup, request timeout,
+and suspension run without hardware in pytest.
+
+
+Session job history normally retains the latest 500 records. On each new job,
+older terminal records are evicted first; queued/running jobs are never evicted.
+This is an in-memory diagnostics window, not archival storage. Persisted FITS,
+sequence recovery state and rotating logs are managed separately.

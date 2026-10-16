@@ -54,9 +54,11 @@ def set_settings(role: Literal["science", "slit"], req: CameraSettingsUpdate, ru
             raise
         except Exception as exc:
             logger.exception("Camera settings failed role=%s", role)
-            if runtime.detector is not None:
+            if role == "science" and runtime.detector is not None:
                 runtime.detector.mark_failed()
                 runtime.set_subsystem_state("detector", ControlState.FAULT, message=f"Settings failed: {exc}; reload cameras")
+            elif role == "slit" and runtime.slit_camera is not None:
+                runtime.slit_camera.stop_preview()
             raise HTTPException(503, f"Settings failed: {exc}; reload cameras before continuing.") from exc
 
 
@@ -131,6 +133,8 @@ def get_slit_camera_preview(runtime: RuntimeDep) -> Response:
         payload, metadata = runtime.slit_camera.get_preview()
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (TimeoutError, OSError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     headers = _no_cache_headers()
     headers.update(
         {
@@ -148,7 +152,10 @@ def start_slit_camera_preview(runtime: RuntimeDep) -> dict:
         raise HTTPException(status_code=503, detail="Slit camera is unavailable.")
     with runtime.sequence_lock:
         runtime.require_open()
-        return runtime.slit_camera.start_preview()
+        try:
+            return runtime.slit_camera.start_preview()
+        except (RuntimeError, TimeoutError, OSError) as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @router.post("/api/v1/cameras/slit/preview/stop")

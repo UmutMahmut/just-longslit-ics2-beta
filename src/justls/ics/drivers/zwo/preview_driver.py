@@ -24,6 +24,7 @@ from justls.ics.infra.camera_config import CameraDeviceConfig
 # JPEG payloads are for on-screen slit/guide monitoring only; capping the
 # rendered size keeps API responses fast without touching the capture ROI.
 _MAX_JPEG_EDGE = 1280
+_MAX_CONSECUTIVE_FAILURES = 3
 logger = logging.getLogger(__name__)
 
 
@@ -85,6 +86,8 @@ class ZwoPreviewCameraDriver:
         self._last_capture: dict[str, Any] | None = None
         self._last_error: str | None = None
         self._failed_frames = 0
+        self._consecutive_failures = 0
+        self._suspended = False
         self._temperature_c: float | None = None
         self.control_limits: dict[int, Any] = {}
 
@@ -150,6 +153,8 @@ class ZwoPreviewCameraDriver:
     def start_preview(self) -> dict[str, Any]:
         with self._lock:
             self._require_session()
+            self._consecutive_failures = 0
+            self._suspended = False
             self._preview_enabled = True
             return self.status()
 
@@ -164,10 +169,12 @@ class ZwoPreviewCameraDriver:
         try:
             result = self._capture_jpeg_locked()
             self._last_error = None
+            self._consecutive_failures = 0
             return result
         except Exception as exc:
             if self._preview_enabled:
                 self._failed_frames += 1
+                self._consecutive_failures += 1
                 self._last_error = f"{type(exc).__name__}: {exc}"
                 logger.exception("Guide capture failed device=%s frame=%s", self.config.device_id, self._sequence + 1)
                 # A failed snap must be cleared before the next requested frame.
@@ -177,6 +184,14 @@ class ZwoPreviewCameraDriver:
                         self._session.stop_exposure()
                 except Exception:
                     logger.warning("Guide frame cleanup failed", exc_info=True)
+                    self._suspended = True
+                if (self._consecutive_failures >= _MAX_CONSECUTIVE_FAILURES
+                        or getattr(self.sdk, "health_error", None)):
+                    self._suspended = True
+                if self._suspended:
+                    self._preview_enabled = False
+                    self._last_error += "; preview suspended; inspect camera, then enable preview to retry"
+                    logger.warning("Guide preview suspended device=%s failures=%s", self.config.device_id, self._consecutive_failures)
             raise
         finally:
             self._lock.release()
@@ -240,11 +255,12 @@ class ZwoPreviewCameraDriver:
             "driver": self.config.driver,
             "model": self.descriptor.name,
             "serial": self.detected_serial or self.config.serial,
-            "state": "unavailable" if error else ("previewing" if self._preview_enabled else "stopped"),
+            "state": "unavailable" if error else ("suspended" if self._suspended else ("previewing" if self._preview_enabled else "stopped")),
             "preview_enabled": self._preview_enabled and error is None,
             "connected": session is not None and error is None,
             "error": error or self._last_error,
             "failed_frames": self._failed_frames,
+            "consecutive_failures": self._consecutive_failures,
             "sequence": self._sequence,
             "temperature_c": self._temperature_c,
             "last_capture": dict(self._last_capture) if self._last_capture else None,
@@ -274,6 +290,9 @@ class ZwoPreviewCameraDriver:
         return output.getvalue()
 
     def _require_session(self) -> ZwoCameraSession:
+        error = getattr(self.sdk, "health_error", None)
+        if error:
+            raise RuntimeError(error)
         if self._session is None:
             raise RuntimeError("ZWO slit/guide camera is not connected")
         return self._session
