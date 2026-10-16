@@ -223,3 +223,16 @@ def test_failed_preview_discards_failed_snap_and_next_frame_recovers():
         assert meta['sequence'] == 1
     finally:
         driver.disconnect()
+
+def test_quarantined_sdk_is_not_reported_as_live_preview():
+    driver = build_driver()
+    driver.connect()
+    driver.sdk.health_error = 'SDK quarantined; restart the service'
+    try:
+        status = driver.status()
+        assert not status['connected']
+        assert not status['preview_enabled']
+        assert status['state'] == 'unavailable'
+        assert 'restart' in status['error']
+    finally:
+        driver.disconnect()

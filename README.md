@@ -26,7 +26,7 @@ publication and durable sequence recovery, and incorporates the useful
 - Optional FITS/PNG persistence, save-last-frame, output-location selection,
   operator instrument context and exposure provenance.
 
-Validation: **439 automated tests passed** on the manual-feedback repair branch.
+Validation: **440 automated tests passed** on the manual-feedback repair branch.
 Bias accepts a zero-second request (mapped to the SDK minimum), Lhires Flat/Arc
 use manual illumination, and Observe provides camera acquisition settings.
 This local repair round awaits the operator's browser retest before main.

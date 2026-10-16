@@ -38,7 +38,7 @@ Repairs and additions:
   settings changes, SDK operation errors and guide capture failures. Native-call
   quarantine still requires service restart; it is not native cancellation.
 
-Validation: **439 automated tests passed**, including frontend JavaScript runtime
+Validation: **440 automated tests passed**, including frontend JavaScript runtime
 regressions for background sequence unlock and settings-form requests/readback.
 Real HTTP acquisition verified all six frame types, Bias 0 -> 32 us, settings,
 ROI/binning and three three-step sequence cycles with guide preview. A further

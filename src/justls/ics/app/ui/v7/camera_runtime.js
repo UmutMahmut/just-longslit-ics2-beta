@@ -61,7 +61,9 @@
     runtime.localFrames = Number(status && status.sequence || 0);
     const toggle = slitToggle();
     if (toggle) toggle.checked = runtime.slitEnabled;
-    setBinding("v7.camera.slit.state", status && status.state || "unavailable");
+    const state = status && status.state || "unavailable";
+    const problem = status && (status.error || status.message);
+    setBinding("v7.camera.slit.state", problem ? `${state} · ${problem}` : state);
     setBinding("v7.camera.slit.sequence", status && status.sequence !== undefined ? status.sequence : "not available");
     scheduleSlitFrames();
   }
