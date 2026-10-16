@@ -447,7 +447,10 @@ class Runtime:
         state_before = None
         if subsystem_state_name is not None:
             state_before = self.get_subsystem_state(subsystem_state_name).state.value
-        return self.job_tracker.create_job(request, state_before=state_before)
+        job = self.job_tracker.create_job(request, state_before=state_before)
+        logger.info("job=%s command=%s action=%s.%s accepted", job.job_id,
+                    request.command_id, request.subsystem, request.action)
+        return job
 
     def mark_job_running(
         self,
@@ -457,6 +460,7 @@ class Runtime:
         message: str = "",
     ) -> JobRecord:
         job = self.job_tracker.mark_running(job_id)
+        logger.info("job=%s running", job_id)
         if subsystem is not None:
             self.set_subsystem_state(subsystem, ControlState.BUSY, message=message)
         return job
@@ -473,6 +477,7 @@ class Runtime:
         if subsystem is not None:
             self.set_subsystem_state(subsystem, ControlState.IDLE, message=message)
             state_after = self.get_subsystem_state(subsystem).state.value
+        logger.info("job=%s succeeded subsystem=%s", job_id, subsystem)
         return self.job_tracker.mark_succeeded(
             job_id,
             result=result,
@@ -501,6 +506,7 @@ class Runtime:
         This is intended for command rejections such as invalid params,
         invalid state transitions, and unsupported operations.
         """
+        logger.warning("job=%s rejected subsystem=%s error=%s", job_id, subsystem, exc)
         state_after = None
 
         if subsystem is not None:
@@ -531,6 +537,7 @@ class Runtime:
         subsystem: str | None = None,
         message: str = "",
     ) -> JobRecord:
+        logger.error("job=%s failed subsystem=%s error=%s", job_id, subsystem, exc)
         state_after = None
         if subsystem is not None:
             self.set_subsystem_state(

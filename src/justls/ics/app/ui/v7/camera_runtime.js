@@ -14,6 +14,7 @@
     localFrames: 0,
     latestScienceExpId: null,
     lastHotplugRender: null,
+    frameLoading: false,
   };
 
   function setBinding(name, value) {
@@ -47,9 +48,11 @@
   }
 
   function refreshSlitFrame() {
-    if (!runtime.slitEnabled) return;
+    if (!runtime.slitEnabled || runtime.frameLoading) return;
     const image = slitImage();
     if (!image) return;
+    runtime.frameLoading = true;
+    image.onload = image.onerror = () => { runtime.frameLoading = false; };
     image.src = `${SLIT_FRAME_ENDPOINT}?frame=${Date.now()}`;
   }
 

@@ -3,13 +3,17 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
+import math
 from typing import Any
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
-
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from justls.ics.domain.detector.frame import DetectorFrameMetadata
 
+
+def validate_exposure_time(seconds: float, frame_type: str) -> None:
+    if not math.isfinite(seconds) or seconds < 0 or (seconds == 0 and frame_type != "bias"):
+        raise ValueError("Exposure time must be positive; only Bias may request 0 s (camera minimum).")
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -637,8 +641,13 @@ class ExposureSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     frame_type: ObservationFrameType = ObservationFrameType.SCIENCE
-    exp_time_s: float = Field(..., gt=0)
+    exp_time_s: float = Field(..., ge=0, allow_inf_nan=False)
     label: str | None = None
+
+    @model_validator(mode="after")
+    def validate_time(self):
+        validate_exposure_time(self.exp_time_s, self.frame_type.value)
+        return self
 
 
 class ValidationSeverity(str, Enum):

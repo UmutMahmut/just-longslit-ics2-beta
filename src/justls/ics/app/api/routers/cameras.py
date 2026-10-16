@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import logging
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
+from justls.ics.domain.detector.acquisition_settings import CameraSettingsUpdate
+from justls.ics.kernel.errors import ICSException
+from justls.ics.kernel.states import ControlState
 
 from justls.ics.app.api.dependencies import RuntimeDep
 from justls.ics.kernel.errors import InvalidStateError
@@ -13,6 +17,47 @@ router = APIRouter(tags=["cameras"])
 
 
 logger = logging.getLogger(__name__)
+
+
+def _camera_driver(runtime, role):
+    adapter = None
+    if role == "science" and runtime.detector is not None:
+        adapter = runtime.detector.adapter
+    elif role == "slit":
+        adapter = runtime.slit_camera
+    if adapter is None:
+        raise HTTPException(503, "Camera is unavailable; inspect camera status and logs.")
+    return adapter.driver
+
+
+@router.get("/api/v1/cameras/{role}/settings")
+def get_settings(role: Literal["science", "slit"], runtime: RuntimeDep):
+    return _camera_driver(runtime, role).get_settings()
+
+
+@router.put("/api/v1/cameras/{role}/settings")
+def set_settings(role: Literal["science", "slit"], req: CameraSettingsUpdate, runtime: RuntimeDep):
+    with runtime.sequence_lock:
+        try:
+            runtime.require_open()
+            reason = runtime.reload_block_reason()
+            if reason:
+                raise InvalidStateError(reason)
+            driver = _camera_driver(runtime, role)
+            updates = req.model_dump(exclude_none=True)
+            result = driver.configure_settings(updates) if updates else driver.get_settings()
+            logger.info("Camera settings applied role=%s updates=%s effective=%s", role, updates, result)
+            return result
+        except ICSException as exc:
+            raise HTTPException(409 if isinstance(exc, InvalidStateError) else 400, str(exc)) from exc
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.exception("Camera settings failed role=%s", role)
+            if runtime.detector is not None:
+                runtime.detector.mark_failed()
+                runtime.set_subsystem_state("detector", ControlState.FAULT, message=f"Settings failed: {exc}; reload cameras")
+            raise HTTPException(503, f"Settings failed: {exc}; reload cameras before continuing.") from exc
 
 
 def _no_cache_headers() -> dict[str, str]:

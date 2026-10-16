@@ -391,7 +391,7 @@ class ObservationService:
         status = self.get_exposure_status()
         armed = status.get("armed_exposure") or {}
         exp_time_s = armed.get("exp_time_s")
-        if not isinstance(exp_time_s, (int, float)) or exp_time_s <= 0:
+        if not isinstance(exp_time_s, (int, float)) or exp_time_s < 0:
             return
 
         self.runtime.schedule_readout(

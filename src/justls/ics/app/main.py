@@ -8,6 +8,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -28,12 +29,14 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    yield
-    # No-op unless a runtime was actually built; importing the app must stay
-    # free of hardware side effects.
-    from justls.ics.kernel.runtime import shutdown_runtime
-
-    shutdown_runtime()
+    from justls.ics.infra.logging import configure_logging
+    configure_logging()
+    try:
+        yield
+    finally:
+        # Also release cameras when a lifespan consumer exits with an error.
+        from justls.ics.kernel.runtime import shutdown_runtime
+        shutdown_runtime()
 
 
 app = FastAPI(
@@ -52,6 +55,9 @@ async def attach_request_id(request: Request, call_next):
     request.state.request_id = request_id
 
     response = await call_next(request)
+    if request.method != "GET" or response.status_code >= 400:
+        logger.info("request=%s method=%s path=%s status=%s", request_id,
+                    request.method, request.url.path, response.status_code)
     response.headers["X-Request-ID"] = request_id
     return response
 
@@ -69,7 +75,7 @@ async def handle_request_validation_error(
             "detail": build_api_error_detail(
                 code="validation_error",
                 message="Request validation failed.",
-                errors=exc.errors(),
+                errors=jsonable_encoder(exc.errors(), custom_encoder={Exception: str}),
             )
         },
     )
@@ -128,10 +134,11 @@ UI_V7_RUNTIME_STATUS = "/ui-assets/v7/runtime_status.js?v=3.0-transition"
 UI_V7_SETUP_RUNTIME = "/ui-assets/v7/setup_runtime.js?v=3.0b-lite"
 UI_V7_INSTRUMENT_RUNTIME = "/ui-assets/v7/instrument_runtime.js?v=3.0-transition"
 UI_V7_PRESET_RUNTIME = "/ui-assets/v7/preset_runtime.js"
-UI_V7_OBSERVE_RUNTIME = "/ui-assets/v7/observe_runtime.js?v=3.0-transition"
+UI_V7_OBSERVE_RUNTIME = "/ui-assets/v7/observe_runtime.js?v=3.3-manual-fixes"
 UI_V7_OBSERVE_GUARD = "/ui-assets/v7/observe_guard.js"
-UI_V7_CAMERA_RUNTIME = "/ui-assets/v7/camera_runtime.js?v=3.0-transition"
-UI_V7_SEQUENCE_RUNTIME = "/ui-assets/v7/sequence_runtime.js?v=3.0-transition"
+UI_V7_CAMERA_RUNTIME = "/ui-assets/v7/camera_runtime.js?v=3.3-manual-fixes"
+UI_V7_ACQUISITION_SETTINGS = "/ui-assets/v7/acquisition_settings.js?v=manual-observation-fixes"
+UI_V7_SEQUENCE_RUNTIME = "/ui-assets/v7/sequence_runtime.js?v=3.3-manual-fixes"
 
 PHASE_2D6_V5_ADAPTER_ENABLED_ENV = "JUSTLS_UI_PHASE2D6_ADAPTER_ENABLED"
 PHASE_2D6_V6_ENABLED_ENV = "JUSTLS_UI_V6_ENABLED"
@@ -244,6 +251,7 @@ def phase_2d8_v7_runtime_scripts() -> tuple[str, ...]:
         scripts.append(UI_V7_OBSERVE_GUARD)
     if flags["observe"]:
         scripts.append(UI_V7_SEQUENCE_RUNTIME)
+        scripts.append(UI_V7_ACQUISITION_SETTINGS)
     if phase_2d8_v7_runtime_enabled():
         scripts.append(UI_V7_CAMERA_RUNTIME)
     return tuple(scripts)

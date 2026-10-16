@@ -231,8 +231,8 @@
     const saveInput = panel.querySelector('[data-role="observe-save-products"]');
 
     const expTime = Number(expInput && expInput.value);
-    if (!Number.isFinite(expTime) || expTime <= 0) {
-      throw new Error("Exposure time must be greater than zero.");
+    if (!Number.isFinite(expTime) || expTime < 0 || (expTime === 0 && frameInput?.value !== "bias")) {
+      throw new Error("Only Bias supports 0 s (camera minimum); other frames require a positive time.");
     }
 
     return {

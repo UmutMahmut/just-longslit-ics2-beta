@@ -69,7 +69,7 @@ class AutoReadoutScheduler:
         tracked at a time; scheduling again cancels the previous one.
         """
         duration_s = float(duration_s)
-        if duration_s <= 0 or not self._enabled():
+        if duration_s < 0 or not self._enabled():
             return False
 
         self.cancel()

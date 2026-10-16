@@ -179,6 +179,13 @@ class ObservationPreviewService:
                 message="Calibration readiness requires a single ExposureSpec.",
             )
 
+        if self.runtime.camera_config is not None and self.runtime.camera_config.calibration_control == "manual":
+            return ReadinessItem(
+                state=ReadinessState.READY,
+                message=("Manual instrument: operator must prepare illumination for Flat/Arc "
+                         "and block light for Bias/Dark. No electronic lamp state is verified."),
+            )
+
         if self.runtime.lamps is None:
             if spec.frame_type in {
                 ObservationFrameType.FLAT,

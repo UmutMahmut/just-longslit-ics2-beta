@@ -1,5 +1,64 @@
 # Project Status
 
+## Manual-observation feedback repairs (2026-10-16)
+
+Local candidate branch: `codex/manual-observation-fixes`, based on main
+`e05b992`. Await operator browser retest before promoting this round to main.
+
+Evidence from the operator's failed run was preserved under
+`var/issue-investigation/`: the first sequence FITS completed and the durable
+index advanced to 1; the plan was subsequently aborted. The Sequence frontend
+did not poll background completion, leaving its controls stale. The then-live
+runtime reported native enumeration timeout and SDK quarantine. After shutdown,
+Windows still listed both cameras but an independent SDK probe saw only ASI294;
+replugging ASI678 restored SDK discovery. No pre-existing persistent log captured
+the original guide failure, so its unique hardware/driver root cause is unknown.
+
+Repairs and additions:
+
+- Zero seconds is accepted only for Bias, consistently in Single, Preview,
+  Sequence, domain and scheduler. ZWO uses the SDK-reported minimum and records
+  both requested and actual integration; this ASI294 read back 32 microseconds.
+- The Lhires profiles declare manual calibration control. Flat/Arc no longer
+  require simulated electric-lamp state; calibration provenance explicitly says
+  physical state was not verified. The operator prepares illumination or blocks
+  light. The simulator's electrical calibration contract remains unchanged.
+- Sequence UI polls completion and unlocks Start Step, preserves command errors,
+  supports Bias/Dark plans and times out unresponsive requests. Steps still
+  require explicit operator starts. Changed scripts have new cache versions.
+- Observe exposes bounded camera settings for gain, offset, binning and ROI size,
+  guide preview time, and supported science cooling. SDK ranges are read at bind;
+  invalid values and changes during detector/sequence ownership are rejected.
+  These runtime settings reset on service restart; pixel format remains RAW16
+  and ROI origin is unchanged. Broader vendor controls/persistence are later work.
+- Status heartbeats use cached camera state instead of native USB reads. Preview
+  requests do not overlap or queue indefinitely; a failed snap is discarded
+  before another requested frame. Cooling status includes cache age.
+- Rotating UTF-8 logs in `var/logs/ics-beta.log` retain request IDs, job lifecycle,
+  settings changes, SDK operation errors and guide capture failures. Native-call
+  quarantine still requires service restart; it is not native cancellation.
+
+Validation: **439 automated tests passed**, including frontend JavaScript runtime
+regressions for background sequence unlock and settings-form requests/readback.
+Real HTTP acquisition verified all six frame types, Bias 0 -> 32 us, settings,
+ROI/binning and three three-step sequence cycles with guide preview. A further
+six full-frame three-step cycles under concurrent status/full/camera/guide HTTP
+load passed in 81.5 s with zero request errors and zero failed guide frames.
+Cooling enable/readback/restore passed. After graceful shutdown, a new lifecycle
+reopened both cameras and saved full-frame Bias and Flat successfully.
+
+Local evidence:
+
+- `var/issue-investigation/live-retest/acceptance.json`
+- `var/issue-investigation/live-retest/polling-load.json`
+- `var/issue-investigation/live-retest/cooler.json`
+- `var/issue-investigation/final-restart/report.json`
+
+The browser tool was denied access to the local test origin; actual browser
+click/render acceptance was not performed. JavaScript tests use local mocked
+DOM/API state without a browser. Calibration-type bench frames validate
+acquisition behavior, not scientifically correct illumination or sky quality.
+
 ## Current scope and priority
 
 ICS Beta is the attended observing/development test platform for a small

@@ -26,7 +26,11 @@ publication and durable sequence recovery, and incorporates the useful
 - Optional FITS/PNG persistence, save-last-frame, output-location selection,
   operator instrument context and exposure provenance.
 
-Validation: **423 automated tests passed**. A real ASI294MC Pro + ASI678MC bench
+Validation: **439 automated tests passed** on the manual-feedback repair branch.
+Bias accepts a zero-second request (mapped to the SDK minimum), Lhires Flat/Arc
+use manual illumination, and Observe provides camera acquisition settings.
+This local repair round awaits the operator's browser retest before main.
+A real ASI294MC Pro + ASI678MC bench
 acceptance passed through FastAPI, including independent Astropy FITS validation,
 concurrent guide preview, abort/replacement, sequences, reload and shutdown/restart.
 See `docs/project_status.md` for evidence, limits and integration provenance.

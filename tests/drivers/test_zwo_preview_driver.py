@@ -177,7 +177,7 @@ def test_serial_mismatch_refuses_connection_and_closes_session() -> None:
     assert session.closed is True
 
 
-def test_status_reports_temperature_and_zero_reading_as_none() -> None:
+def test_status_reports_cached_temperature_without_usb_polling() -> None:
     driver = build_driver()
     driver.connect()
 
@@ -187,7 +187,9 @@ def test_status_reports_temperature_and_zero_reading_as_none() -> None:
     assert status["temperature_c"] == pytest.approx(25.5)
 
     driver._fake_session.controls[8] = 0  # type: ignore[attr-defined]
-    assert driver.status()["temperature_c"] is None
+    assert driver.status()["temperature_c"] == pytest.approx(25.5)
+    driver._fake_session.control_value = lambda *_: pytest.fail("Status polled USB")
+    assert driver.status()["connected"]
     driver.disconnect()
 
 
@@ -200,3 +202,24 @@ def test_disconnect_releases_session() -> None:
     status = driver.status()
     assert status["connected"] is False
     assert status["state"] == "stopped"
+
+def test_failed_preview_discards_failed_snap_and_next_frame_recovers():
+    driver = build_driver()
+    driver.connect()
+    session = driver._fake_session
+    results = iter(['failed', 'success'])
+    session.wait_for_exposure = lambda **_: next(results)
+    stopped = []
+    session.stop_exposure = lambda: stopped.append(True)
+    try:
+        with pytest.raises(RuntimeError, match='failed'):
+            driver.capture_jpeg()
+        assert stopped == [True]
+        assert driver.status()['failed_frames'] == 1
+        assert driver.status()['error']
+        payload, meta = driver.capture_jpeg()
+        assert payload[:2] == b'\xff\xd8'
+        assert driver.status()['error'] is None
+        assert meta['sequence'] == 1
+    finally:
+        driver.disconnect()

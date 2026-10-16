@@ -30,10 +30,21 @@ class SimDetectorDriver:
             manufacturer="SIMULATED",
         )
         self.role = role
+        self.sensor_shape = (self.config.width, self.config.height)
         self._lock = RLock()
         self._active: dict[str, Any] | None = None
         self._latest_image: np.ndarray | None = None
         self._latest_capture: dict[str, Any] | None = None
+
+
+    def get_settings(self) -> dict:
+        from justls.ics.infra.acquisition_settings import describe
+        return describe(self)
+
+    def configure_settings(self, updates: dict) -> dict:
+        with self._lock:
+            from justls.ics.infra.acquisition_settings import configure_simulated
+            return configure_simulated(self, updates)
 
     def start_exposure(
         self,
@@ -65,9 +76,10 @@ class SimDetectorDriver:
                         "MONO8" if self.config.bit_depth <= 8 else "MONO16"
                     ),
                     sensor_bit_depth=self.config.bit_depth,
-                    bin_x=1,
-                    bin_y=1,
+                    bin_x=self.config.binning,
+                    bin_y=self.config.binning,
                     gain=self.config.gain,
+                    offset=float(self.config.offset),
                 ).model_dump(mode="json"),
             }
             return dict(self._active)

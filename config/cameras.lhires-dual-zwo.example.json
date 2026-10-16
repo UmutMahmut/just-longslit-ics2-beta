@@ -37,7 +37,9 @@
     {
       "role": "science",
       "device_id": "asi294mc-pro-01",
-      "logical_channels": ["SCI"],
+      "logical_channels": [
+        "SCI"
+      ],
       "shared_capture": false
     },
     {
@@ -46,5 +48,6 @@
       "logical_channels": [],
       "shared_capture": false
     }
-  ]
+  ],
+  "calibration_control": "manual"
 }

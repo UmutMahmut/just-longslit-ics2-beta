@@ -59,3 +59,33 @@ For repeatable bench acceptance (writes engineering frames):
 
 Inspect the resulting report.json and FITS beneath var/hardware-acceptance.
 This does not certify on-sky observing or physical cable-loss behavior.
+
+## Browser retest of the manual-feedback repairs
+
+Restart with the same launcher command, then Ctrl-F5 the browser. The current
+local repair branch is runnable in place; no branch switch is needed to test it.
+
+1. Single: select Bias, enter 0 s, Arm and Start. It should automatically save
+   when saving is selected. FITS records EXPREQ=0 and EXPTIME=camera minimum
+   (32 us on this ASI294).
+2. Prepare physical Flat illumination, select Flat and acquire; prepare the
+   physical comparison lamp/optical path and acquire Arc separately. No
+   simulated lamp command is required in the manual Lhires profile. Block
+   light physically for Bias/Dark; this camera has no mechanical shutter.
+3. Load the usual test 1/2/3-second sequence. After each step's automatic readout,
+   Start Step should become enabled again; click it for the next step. The
+   guide image should continue updating.
+4. Expand Camera acquisition settings in Observe. Change gain/offset, Apply,
+   and acquire a frame. Read Settings shows effective values. Binning changes
+   resize the current ROI unless width/height are explicitly edited. Values are
+   SDK-bounded and reset on restart; RAW16 and ROI origin are not editable here.
+5. While an exposure or loaded/non-terminal sequence owns the detector, applying
+   camera settings should be rejected without changing them.
+
+Persistent diagnostic log: `var/logs/ics-beta.log` (UTC timestamps, rotating
+5 MB files). For a new failure, preserve the log and report the operation and
+approximate time before restarting/reloading cameras:
+
+```powershell
+Get-Content .\var\logs\ics-beta.log -Tail 120
+```

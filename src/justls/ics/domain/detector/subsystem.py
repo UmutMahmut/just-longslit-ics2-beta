@@ -9,6 +9,7 @@ from justls.ics.domain.observation.models import (
     FrameResult,
     ObservationMeta,
     utc_now_iso,
+    validate_exposure_time,
 )
 from justls.ics.kernel.errors import InvalidParamError, InvalidStateError
 from justls.ics.kernel.states import ExposureState
@@ -96,12 +97,14 @@ class DetectorSubsystem:
     ) -> ExposureSnapshot:
         exp_time_s = float(exp_time_s)
 
-        if exp_time_s <= 0:
+        try:
+            validate_exposure_time(exp_time_s, frame_type)
+        except ValueError as exc:
             raise InvalidParamError(
-                "exposure time must be > 0 s",
+                str(exc),
                 subsystem="detector",
                 details={"exp_time_s": exp_time_s},
-            )
+            ) from exc
 
         if self._state not in {
             ExposureState.READY_TO_ARM,

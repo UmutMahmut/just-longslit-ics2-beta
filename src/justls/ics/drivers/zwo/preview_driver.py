@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import logging
 from datetime import datetime, timezone
 from threading import RLock
 from typing import Any
@@ -23,6 +24,7 @@ from justls.ics.infra.camera_config import CameraDeviceConfig
 # JPEG payloads are for on-screen slit/guide monitoring only; capping the
 # rendered size keeps API responses fast without touching the capture ROI.
 _MAX_JPEG_EDGE = 1280
+logger = logging.getLogger(__name__)
 
 
 def utc_now_iso() -> str:
@@ -81,6 +83,20 @@ class ZwoPreviewCameraDriver:
         self._preview_enabled = False
         self._sequence = 0
         self._last_capture: dict[str, Any] | None = None
+        self._last_error: str | None = None
+        self._failed_frames = 0
+        self._temperature_c: float | None = None
+        self.control_limits: dict[int, Any] = {}
+
+
+    def get_settings(self) -> dict:
+        from justls.ics.infra.acquisition_settings import describe
+        return describe(self)
+
+    def configure_settings(self, updates: dict) -> dict:
+        with self._lock:
+            from justls.ics.drivers.zwo.settings import configure
+            return configure(self, updates)
 
     def connect(self) -> None:
         with self._lock:
@@ -96,6 +112,9 @@ class ZwoPreviewCameraDriver:
                     image_type=ASI_IMG_RAW16,
                 )
                 detected_serial = session.serial_number()
+                controls = getattr(session, "controls", None)
+                if callable(controls):
+                    self.control_limits = {control.control_type: control for control in controls()}
                 if self.config.serial and self.config.serial != detected_serial:
                     raise RuntimeError(
                         "detected ZWO serial number does not match the deployment "
@@ -109,6 +128,8 @@ class ZwoPreviewCameraDriver:
             self._session = session
             self.detected_serial = detected_serial
             self._preview_enabled = True
+            raw, _ = session.control_value(ASI_TEMPERATURE)
+            self._temperature_c = raw / 10.0 if raw != 0 else None
 
     def disconnect(self) -> None:
         with self._lock:
@@ -138,6 +159,29 @@ class ZwoPreviewCameraDriver:
             return self.status()
 
     def capture_jpeg(self) -> tuple[bytes, dict[str, Any]]:
+        if not self._lock.acquire(blocking=False):
+            raise RuntimeError("slit/guide frame is already being read; retry next refresh")
+        try:
+            result = self._capture_jpeg_locked()
+            self._last_error = None
+            return result
+        except Exception as exc:
+            if self._preview_enabled:
+                self._failed_frames += 1
+                self._last_error = f"{type(exc).__name__}: {exc}"
+                logger.exception("Guide capture failed device=%s frame=%s", self.config.device_id, self._sequence + 1)
+                # A failed snap must be cleared before the next requested frame.
+                # The native gate prevents cleanup entering a quarantined DLL.
+                try:
+                    if self._session is not None:
+                        self._session.stop_exposure()
+                except Exception:
+                    logger.warning("Guide frame cleanup failed", exc_info=True)
+            raise
+        finally:
+            self._lock.release()
+
+    def _capture_jpeg_locked(self) -> tuple[bytes, dict[str, Any]]:
         with self._lock:
             if not self._preview_enabled:
                 raise RuntimeError("slit/guide preview is stopped")
@@ -187,31 +231,24 @@ class ZwoPreviewCameraDriver:
         return jpeg, meta
 
     def status(self) -> dict[str, Any]:
-        with self._lock:
-            session = self._session
-            temperature_c: float | None = None
-            if session is not None:
-                try:
-                    raw, _ = session.control_value(ASI_TEMPERATURE)
-                    # 0.0 is the "no trustworthy sensor" reading on ZWO
-                    # cameras without a powered cooler path.
-                    if raw != 0:
-                        temperature_c = raw / 10.0
-                except Exception:
-                    temperature_c = None
-            return {
-                "device_id": self.config.device_id,
-                "role": self.role,
-                "driver": self.config.driver,
-                "model": self.descriptor.name,
-                "serial": self.detected_serial or self.config.serial,
-                "state": "previewing" if self._preview_enabled else "stopped",
-                "preview_enabled": self._preview_enabled,
-                "connected": session is not None,
-                "sequence": self._sequence,
-                "temperature_c": temperature_c,
-                "last_capture": dict(self._last_capture) if self._last_capture else None,
-            }
+        # A UI heartbeat must not wait for USB nor make another USB request.
+        session = self._session
+        error = getattr(self.sdk, "health_error", None)
+        return {
+            "device_id": self.config.device_id,
+            "role": self.role,
+            "driver": self.config.driver,
+            "model": self.descriptor.name,
+            "serial": self.detected_serial or self.config.serial,
+            "state": "previewing" if self._preview_enabled else "stopped",
+            "preview_enabled": self._preview_enabled,
+            "connected": session is not None and error is None,
+            "error": error or self._last_error,
+            "failed_frames": self._failed_frames,
+            "sequence": self._sequence,
+            "temperature_c": self._temperature_c,
+            "last_capture": dict(self._last_capture) if self._last_capture else None,
+        }
 
     def _render_jpeg(self, image: np.ndarray) -> bytes:
         # Robust percentile stretch: slit illumination is highly non-uniform,

@@ -9,6 +9,7 @@ from uuid import uuid4
 import numpy as np
 
 from justls.ics.domain.detector.frame import DetectorFrameMetadata
+from justls.ics.domain.observation.models import validate_exposure_time
 from justls.ics.kernel.errors import InvalidStateError, UnsupportedError
 from justls.ics.infra.camera_config import CameraDeviceConfig
 from justls.ics.drivers.zwo.sdk import (
@@ -71,6 +72,18 @@ class ZwoDetectorDriver:
         # Last trustworthy temperature reading, for stale/invalid semantics.
         self._last_temperature_c: float | None = None
         self._last_temperature_at: float | None = None
+        self.control_limits: dict[int, Any] = {}
+        self._last_cooling: dict[str, Any] | None = None
+
+
+    def get_settings(self) -> dict:
+        from justls.ics.infra.acquisition_settings import describe
+        return describe(self)
+
+    def configure_settings(self, updates: dict) -> dict:
+        with self._lock:
+            from justls.ics.drivers.zwo.settings import configure
+            return configure(self, updates)
 
     def connect(self) -> None:
         with self._lock:
@@ -86,6 +99,9 @@ class ZwoDetectorDriver:
                     image_type=ASI_IMG_RAW16,
                 )
                 detected_serial = session.serial_number()
+                controls = getattr(session, "controls", None)
+                if callable(controls):
+                    self.control_limits = {control.control_type: control for control in controls()}
                 if self.config.serial and self.config.serial != detected_serial:
                     raise RuntimeError(
                         "detected ZWO serial number does not match the deployment "
@@ -98,6 +114,8 @@ class ZwoDetectorDriver:
             self._session_context = context
             self._session = session
             self.detected_serial = detected_serial
+            if self.descriptor.cooler:
+                self.cooling_status()
 
     def disconnect(self) -> None:
         with self._lock:
@@ -128,13 +146,17 @@ class ZwoDetectorDriver:
         with self._lock:
             if self._active is not None:
                 raise RuntimeError("science camera already has an active exposure")
-            if exp_time_s <= 0:
-                raise ValueError("exp_time_s must be positive")
+            validate_exposure_time(float(exp_time_s), frame_type)
             session = self._require_session()
 
-            exposure_us = max(1, round(float(exp_time_s) * 1_000_000))
-            session.set_control_value(ASI_GAIN, self.gain)
-            session.set_control_value(ASI_OFFSET, self.offset)
+            exposure_limit = self.control_limits.get(ASI_EXPOSURE)
+            minimum_us = exposure_limit.minimum if exposure_limit is not None else 1
+            exposure_us = max(minimum_us, round(float(exp_time_s) * 1_000_000))
+            if exposure_limit is not None and exposure_us > exposure_limit.maximum:
+                from justls.ics.kernel.errors import InvalidParamError
+                raise InvalidParamError("Requested exposure exceeds this camera's SDK maximum", subsystem="detector")
+            self.gain, _ = session.set_control_value(ASI_GAIN, self.gain)
+            self.offset, _ = session.set_control_value(ASI_OFFSET, self.offset)
             actual_exposure_us, _ = session.set_control_value(
                 ASI_EXPOSURE,
                 exposure_us,
@@ -151,7 +173,7 @@ class ZwoDetectorDriver:
                 "frame_token": f"frame-{uuid4().hex[:12]}",
                 "started_at": utc_now_iso(),
             }
-            session.start_exposure(dark=frame_type.strip().lower() == "dark")
+            session.start_exposure(dark=frame_type.strip().lower() in {"bias", "dark"})
             self._exposure_deadline = time.monotonic() + active["actual_exp_time_s"]
             self._active = active
             return {
@@ -306,7 +328,7 @@ class ZwoDetectorDriver:
         target, _ = session.control_value(ASI_TARGET_TEMPERATURE)
         enabled, _ = session.control_value(ASI_COOLER_ON)
         power, _ = session.control_value(ASI_COOLER_POWER_PERCENT)
-        return {
+        result = {
             "detector_temperature_c": temperature_c,
             "temperature_state": temperature_state,
             "temperature_age_s": (
@@ -318,6 +340,8 @@ class ZwoDetectorDriver:
             "cooler_enabled": bool(enabled),
             "cooler_power_pct": float(power),
         }
+        self._last_cooling = dict(result)
+        return result
 
     def get_latest_image(self) -> np.ndarray:
         with self._lock:
@@ -326,35 +350,31 @@ class ZwoDetectorDriver:
             return self._latest_image.copy()
 
     def get_status(self) -> dict[str, Any]:
-        with self._lock:
-            session = self._session
-            error = None
-            cooling = None
-            exposure_state = "idle"
-            if session is not None:
-                try:
-                    if self._active is not None:
-                        exposure_state = session.exposure_status()
-                    if self.descriptor.cooler:
-                        cooling = self.cooling_status()
-                except Exception as exc:
-                    error = f"{type(exc).__name__}: {exc}"
-                    exposure_state = "unavailable"
-            return {
-                "device_id": self.config.device_id,
-                "role": "science",
-                "driver": self.config.driver,
-                "model": self.descriptor.name,
-                "serial": self.detected_serial or self.config.serial,
-                "state": exposure_state,
-                "connected": session is not None and error is None,
-                "error": error,
-                "active_exposure": dict(self._active) if self._active else None,
-                "latest_capture": dict(self._latest_capture)
-                if self._latest_capture
-                else None,
-                "cooling": cooling,
-            }
+        # Status polling must not perform SDK I/O or queue behind a readout.
+        session = self._session
+        active = self._active
+        error = getattr(self.sdk, "health_error", None)
+        cooling = dict(self._last_cooling) if self._last_cooling else None
+        if cooling is not None and self._last_temperature_at is not None:
+            cooling["temperature_age_s"] = round(time.monotonic() - self._last_temperature_at, 3)
+            if cooling["temperature_age_s"] > 5:
+                cooling["temperature_state"] = "stale"
+        exposure_state = "unavailable" if error else ("working" if active else "idle")
+        return {
+            "device_id": self.config.device_id,
+            "role": "science",
+            "driver": self.config.driver,
+            "model": self.descriptor.name,
+            "serial": self.detected_serial or self.config.serial,
+            "state": exposure_state,
+            "connected": session is not None and error is None,
+            "error": error,
+            "active_exposure": dict(active) if active else None,
+            "latest_capture": dict(self._latest_capture)
+            if self._latest_capture
+            else None,
+            "cooling": cooling,
+        }
 
     def _frame_metadata(self) -> DetectorFrameMetadata:
         cooling = self.cooling_status() if self.descriptor.cooler else {}

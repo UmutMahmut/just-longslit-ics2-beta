@@ -92,8 +92,8 @@
       const [frameTypeRaw, secondsRaw, ...labelParts] = line.split(",").map((part) => part.trim());
       const frameType = frameTypeRaw || "science";
       const expTime = Number(secondsRaw);
-      if (!["science", "flat", "arc", "test"].includes(frameType)) throw new Error(`Step ${index + 1}: unsupported frame type ${frameType}.`);
-      if (!Number.isFinite(expTime) || expTime <= 0) throw new Error(`Step ${index + 1}: exposure time must be positive.`);
+      if (!["science", "bias", "dark", "flat", "arc", "test"].includes(frameType)) throw new Error(`Step ${index + 1}: unsupported frame type ${frameType}.`);
+      if (!Number.isFinite(expTime) || expTime < 0 || (expTime === 0 && frameType !== "bias")) throw new Error(`Step ${index + 1}: only Bias supports 0 s; other frames require a positive time.`);
       return { frame_type: frameType, exp_time_s: expTime, label: labelParts.join(",") || null };
     });
     const save = saveControl();
@@ -135,9 +135,10 @@
   function render(payload, command) {
     const snapshot = snapshotFrom(payload);
     if (snapshot) runtime.snapshot = snapshot;
-    runtime.lastCommand = command;
+    else if (command === "status" && payload === null) runtime.snapshot = null;
+    if (command !== "status") runtime.lastCommand = command;
     runtime.lastJob = payload && payload.latest_job ? payload.latest_job : runtime.lastJob;
-    runtime.lastError = payload && payload.error ? `${payload.error.code}: ${payload.error.message}` : null;
+    if (command !== "status") runtime.lastError = payload && payload.error ? `${payload.error.code}: ${payload.error.message}` : null;
     setBinding("v7.sequence.last_command", runtime.lastCommand || "none");
     setBinding("v7.sequence.request_id", runtime.lastRequestId || "not available");
     setBinding("v7.sequence.latest_job", jobLabel(runtime.lastJob));
@@ -165,7 +166,7 @@
     }
     const total = current.plan && current.plan.exposures ? current.plan.exposures.length : 0;
     const save = saveControl();
-    if (save) save.checked = Boolean(current.plan && current.plan.save_requested);
+    if (save && sequenceLocked()) save.checked = Boolean(current.plan && current.plan.save_requested);
     const completed = (current.step_results || []).filter((step) => step.state === "completed").length;
     const exposure = current.current_index < total ? current.plan.exposures[current.current_index] : null;
     setBinding("v7.sequence.plan_id", current.plan.plan_id);
@@ -237,15 +238,19 @@
   async function request(command, body) {
     if (runtime.busy) return;
     setBusy(true);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 15000);
     try {
       const response = await fetch(ENDPOINTS[command], {
         method: command === "status" ? "GET" : "POST",
         headers: { Accept: "application/json", "Content-Type": "application/json" },
         cache: "no-store",
+        signal: controller.signal,
         body: body ? JSON.stringify(body) : undefined,
       });
-      runtime.lastRequestId = requestIdFrom(response);
+      if (command !== "status") runtime.lastRequestId = requestIdFrom(response);
       const payload = await response.json();
+      if (!response.ok && !payload?.error) throw new Error(`HTTP ${response.status}: ${JSON.stringify(payload?.detail || payload)}`);
       render(payload, command);
       return payload;
     } catch (error) {
@@ -253,8 +258,16 @@
       render({ error: { code: "client_error", message: runtime.lastError } }, command);
       return null;
     } finally {
+      window.clearTimeout(timeout);
       setBusy(false);
+      scheduleStatusPoll();
     }
+  }
+
+  function scheduleStatusPoll() {
+    window.clearTimeout(runtime.pollTimer);
+    if (!runtime.started) return;
+    runtime.pollTimer = window.setTimeout(() => request("status"), runtime.snapshot?.active_exposure ? 750 : 2500);
   }
 
   async function abortSequence() {

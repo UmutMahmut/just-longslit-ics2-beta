@@ -279,7 +279,12 @@ class ZwoSdk:
         self._configure_signatures()
         gate = shared_gate(os.path.normcase(str(self.dll_path))) if real_library else NativeCallGate()
         self._library = GuardedLibrary(self._library, gate)
+        self._native_gate = gate
         self.serial_by_camera_id: dict[int, str] = {}
+
+    @property
+    def health_error(self) -> str | None:
+        return self._native_gate._quarantined
 
     def _configure_signatures(self) -> None:
         self._library.ASIGetSDKVersion.argtypes = []

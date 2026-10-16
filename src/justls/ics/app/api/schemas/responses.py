@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -206,6 +206,13 @@ class ExposureRecordResponse(BaseModel):
     detector_metadata: dict[str, Any] | None = None
 
 
+class ManualCalibrationSnapshotResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    control_mode: Literal["manual"]
+    physical_state_verified: Literal[False] = False
+    frame_type: str
+
+
 class ObservationMetaResponse(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -219,7 +226,7 @@ class ObservationMetaResponse(BaseModel):
     finished_at_utc: str | None = None
     operator_note: str | None = None
     instrument_snapshot: dict[str, Any] | None = None
-    calibration_snapshot: CalibrationStatusResponse | None = None
+    calibration_snapshot: CalibrationStatusResponse | ManualCalibrationSnapshotResponse | None = None
     detector_config: DetectorConfig | None = None
     setup_context: dict[str, Any] | None = None
     data_preview: dict[str, Any] | None = None

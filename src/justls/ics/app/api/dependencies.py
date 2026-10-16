@@ -234,6 +234,9 @@ def _handle_observation_arm(runtime: Runtime, request):
     calibration_snapshot = None
     if runtime.lamps is not None:
         calibration_snapshot = runtime.lamps.get_snapshot().to_dict()
+    if runtime.camera_config is not None and runtime.camera_config.calibration_control == "manual":
+        calibration_snapshot = {"control_mode": "manual", "physical_state_verified": False,
+                                "frame_type": str(request.params["frame_type"])}
 
     detector_config = runtime.get_detector_config_dict()
     preset_apply = _latest_successful_preset_apply(runtime)

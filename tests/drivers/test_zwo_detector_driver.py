@@ -225,3 +225,27 @@ def test_temperature_read_failure_uses_cache_then_invalid() -> None:
         assert status["detector_temperature_c"] == 12.3
     finally:
         driver.disconnect()
+
+def test_bias_zero_uses_sdk_minimum_and_records_both_times():
+    from types import SimpleNamespace
+    driver = _connected_driver(FakeZwoSession())
+    driver.control_limits[1] = SimpleNamespace(minimum=32, maximum=2000000000)
+    try:
+        started = driver.start_exposure(obs_id='bias-min', exp_id='bias-0', exp_time_s=0, frame_type='bias', save_requested=False)
+        assert started['requested_exp_time_s'] == 0
+        assert started['actual_exp_time_s'] == .000032
+        assert driver._session.dark
+        assert driver.finish_exposure()['requested_exp_time_s'] == 0
+    finally:
+        driver.disconnect()
+
+
+def test_status_is_nonblocking_and_performs_no_sdk_io():
+    session = FakeZwoSession()
+    driver = _connected_driver(session)
+    try:
+        session.control_value = lambda *_: pytest.fail('status polled USB controls')
+        session.exposure_status = lambda: pytest.fail('status polled exposure hardware')
+        assert driver.get_status()['connected']
+    finally:
+        driver.disconnect()

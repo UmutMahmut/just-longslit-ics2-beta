@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from justls.ics.domain.observation.models import ObservationCommandFeedback
+from justls.ics.domain.observation.models import ObservationCommandFeedback, validate_exposure_time
 
 from .observation_preview import ObservationPreviewResponse, ValidationIssueResponse
 
@@ -12,10 +12,15 @@ from .observation_preview import ObservationPreviewResponse, ValidationIssueResp
 class ObservationArmReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    exp_time_s: float = Field(..., gt=0)
+    exp_time_s: float = Field(..., ge=0, allow_inf_nan=False)
     frame_type: Literal["science", "bias", "dark", "flat", "arc", "test"] = "science"
     operator_note: str | None = None
     save_requested: bool = False
+
+    @model_validator(mode="after")
+    def validate_time(self):
+        validate_exposure_time(self.exp_time_s, self.frame_type)
+        return self
 
 
 ObservationCommandLiteral = Literal[

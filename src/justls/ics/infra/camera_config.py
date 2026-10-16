@@ -94,6 +94,7 @@ class CameraSystemConfig(BaseModel):
 
     schema_version: Literal[2] = 2
     profile_name: str = "campus-beta-sim"
+    calibration_control: Literal["simulated", "manual"] = "simulated"
     detector_profile_name: str | None = None
     data_root: str = "var/data"
     devices: list[CameraDeviceConfig] = Field(default_factory=_default_devices)

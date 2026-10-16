@@ -22,9 +22,20 @@ class SimPreviewCameraDriver:
     def __init__(self, config: CameraDeviceConfig, *, role: str = "slit") -> None:
         self.config = config
         self.role = role
+        self.sensor_shape = (self.config.width, self.config.height)
         self._lock = RLock()
         self._sequence = 0
         self._preview_enabled = True
+
+
+    def get_settings(self) -> dict:
+        from justls.ics.infra.acquisition_settings import describe
+        return describe(self)
+
+    def configure_settings(self, updates: dict) -> dict:
+        with self._lock:
+            from justls.ics.infra.acquisition_settings import configure_simulated
+            return configure_simulated(self, updates)
 
     def start_preview(self) -> dict[str, Any]:
         with self._lock:

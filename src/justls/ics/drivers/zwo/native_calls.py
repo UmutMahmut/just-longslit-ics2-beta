@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import queue
 import threading
+import logging
 from dataclasses import dataclass, field
 from typing import Callable, Any
 
 SDK_HARDWARE_TIMEOUT_S = 8.0
+logger = logging.getLogger(__name__)
 
 
 class ZwoHardwareTimeoutError(TimeoutError):
@@ -65,10 +67,12 @@ class NativeCallGate:
             if not call.done.wait(self.timeout_s):
                 error = ZwoHardwareTimeoutError(label, self.timeout_s)
                 self._quarantined = str(error)
+                logger.error("Native call timeout: %s", error)
                 raise error
             if call.error is not None:
                 if isinstance(call.error, OSError):
                     self._quarantined = f"Native SDK failure: {call.error}; restart the service"
+                logger.error("Native operation %s failed: %s", label, call.error)
                 raise call.error
             return call.value
 
