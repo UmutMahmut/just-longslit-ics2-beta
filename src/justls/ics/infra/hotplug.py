@@ -1,17 +1,17 @@
-"""Background hot-plug monitor for the ZWO SDK.
+"""Advisory hot-plug monitor independent of active camera SDK sessions.
 
 The ZWO vendor library can leave an open process in a bad state when a camera
 is unplugged, replugged, or the host USB stack resets. We do not want the
 service to silently keep an exclusive handle on a camera that the operator
 just pulled, nor do we want to thrash a re-bind during an exposure.
 
-The monitor periodically asks the SDK how many cameras it currently sees
-(``ASIGetNumOfConnectedCameras``). The numbers, the timestamp of the last
+The monitor periodically reads Windows PnP presence. The numbers, the timestamp of the last
 check, and the timestamp of the last change are surfaced through
 ``/api/v1/cameras/status`` so the operator console can render a banner
 ("USB changed at 14:25") and prompt the user to ``POST /api/v1/cameras/reload``
 to perform a controlled re-bind. We never auto-rebind because a re-bind
-releases every camera handle and aborts any in-flight exposure.
+releases every camera handle. Reload is rejected while acquisition or a
+non-terminal sequence owns the detector. Presence does not prove SDK health.
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ class HotplugSample:
 
 
 class HotplugMonitor:
-    """A small watchdog thread that asks the SDK how many cameras it sees.
+    """A small advisory thread that samples OS camera presence.
 
     The monitor is *advisory only*: it never rebinds drivers, never aborts
     exposures, and never mutates the runtime state machine. It exists so the
@@ -81,7 +81,6 @@ class HotplugMonitor:
         self._last_count: int | None = initial
         self._last_checked_at: datetime | None = self._utcnow()
         self._last_change_at: datetime | None = None
-        self._last_error: str | None = None
 
     # -- public surface -----------------------------------------------------
 
@@ -104,7 +103,8 @@ class HotplugMonitor:
             return
         self._stop_event.set()
         self._thread.join(timeout=timeout_s)
-        self._thread = None
+        if not self._thread.is_alive():
+            self._thread = None
 
     def is_running(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
@@ -168,12 +168,7 @@ class HotplugMonitor:
                 self._stop_event.wait(0.5)
 
 
-def make_probe(sdk) -> Callable[[], int]:
-    """Build a probe closure that always goes through the SDK enumeration lock.
-
-    Passing a callable (instead of the SDK object) keeps ``HotplugMonitor``
-    test-friendly: tests can swap the probe with a stub.
-    """
-    def _probe() -> int:
-        return sdk.connected_camera_count()
-    return _probe
+def make_probe(sdk=None) -> Callable[[], int]:
+    """Monitor OS presence without enumerating inside an active vendor SDK."""
+    from justls.ics.infra.windows_usb import zwo_camera_count
+    return zwo_camera_count

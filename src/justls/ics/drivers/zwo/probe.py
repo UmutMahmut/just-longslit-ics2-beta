@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from justls.ics.drivers.zwo.native_calls import ZwoHardwareTimeoutError, ZwoSdkQuarantinedError
+
 import argparse
 import json
 import os
@@ -72,7 +74,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         )
         return 2
-    except (ZwoSdkLibraryLoadError, ZwoSdkError) as exc:
+    except (ZwoSdkLibraryLoadError, ZwoSdkError, ZwoHardwareTimeoutError, ZwoSdkQuarantinedError) as exc:
         print(
             json.dumps(
                 {

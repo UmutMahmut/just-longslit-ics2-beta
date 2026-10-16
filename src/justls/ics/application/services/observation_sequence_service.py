@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-from justls.ics.application.services.exposure_auto_readout import AutoReadoutScheduler
 from justls.ics.application.services.observation_preview_service import (
     ObservationPreviewService,
 )
@@ -70,9 +69,6 @@ class ObservationSequenceService:
         self.setup_context_service = setup_context_service
         self.state_store = state_store or InMemoryObservationSequenceStore()
         initialize_runtime_sequence(runtime, self.state_store)
-        # Each sequence step is a real exposure: read it out when its timer
-        # expires, then let the operator start the next step.
-        self._auto_readout = AutoReadoutScheduler()
 
     def status(self) -> SequenceExecutionSnapshot | None:
         return self.runtime.sequence_execution
@@ -190,6 +186,7 @@ class ObservationSequenceService:
         self.runtime.mark_job_running(job.job_id)
 
         try:
+            self.runtime.require_open()
             if self.runtime.sequence_persistence_error is not None:
                 raise InvalidStateError(
                     "Sequence persistence is unavailable; observation commands are blocked.",
@@ -202,6 +199,23 @@ class ObservationSequenceService:
             snapshot = action()
             self._persist(snapshot)
         except ICSException as exc:
+            if (self.runtime.detector is not None
+                    and self.runtime.detector.state.value == "failed"
+                    and self.runtime.sequence_execution is not None
+                    and self.runtime.sequence_execution.state.value not in {"completed", "aborted", "failed"}):
+                snapshot = self.runtime.sequence_execution
+                snapshot.state = SequenceExecutionState.RECOVERY_REQUIRED
+                snapshot.active_exposure = False
+                snapshot.recovery = SequenceRecoveryInfo(
+                    reason="acquisition_failure",
+                    interrupted_state="running",
+                    interrupted_index=snapshot.current_index,
+                    file_issues=[str(exc)],
+                    retry_allowed=False,
+                    allowed_actions=[SequenceRecoveryAction.ABORT, SequenceRecoveryAction.MARK_FAILED],
+                )
+                snapshot.message = "Acquisition failed; review data and hardware before recovery."
+                self._persist(snapshot)
             job = self.runtime.mark_job_rejected(job.job_id, exc)
             return SequenceCommandResult(
                 command=command,
@@ -434,7 +448,7 @@ class ObservationSequenceService:
         snapshot.message = (
             f"Exposure {snapshot.current_index + 1}/{snapshot.total_steps} is running."
         )
-        self._auto_readout.schedule(
+        self.runtime.schedule_readout(
             duration_s=float(exposure.exp_time_s),
             callback=self.finish_step,
             description=f"sequence-step-{snapshot.current_index + 1}",
@@ -442,14 +456,12 @@ class ObservationSequenceService:
         return snapshot
 
     def _finish_step(self) -> SequenceExecutionSnapshot:
-        self._auto_readout.cancel()
         self._require_active_step("finish")
         result = self.observation_service.finish(sequence_owned=True)
         self._require_dispatch_success(result, "finish")
         return self._complete_active_step(SequenceStepState.COMPLETED)
 
     def _stop_readout_step(self) -> SequenceExecutionSnapshot:
-        self._auto_readout.cancel()
         self._require_active_step("stop_readout")
         result = self.observation_service.stop_readout(sequence_owned=True)
         self._require_dispatch_success(result, "stop_readout")
@@ -561,7 +573,7 @@ class ObservationSequenceService:
             )
 
         # Stop any pending automatic readout: the step is being abandoned.
-        self._auto_readout.cancel()
+        self.runtime.cancel_readout()
 
         if snapshot.active_exposure:
             result = self.observation_service.abort_discard(sequence_owned=True)

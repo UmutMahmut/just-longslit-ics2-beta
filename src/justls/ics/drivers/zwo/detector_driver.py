@@ -9,6 +9,7 @@ from uuid import uuid4
 import numpy as np
 
 from justls.ics.domain.detector.frame import DetectorFrameMetadata
+from justls.ics.kernel.errors import InvalidStateError, UnsupportedError
 from justls.ics.infra.camera_config import CameraDeviceConfig
 from justls.ics.drivers.zwo.sdk import (
     ASI_COOLER_ON,
@@ -64,6 +65,7 @@ class ZwoDetectorDriver:
         self._session: ZwoCameraSession | None = None
         self.detected_serial: str | None = None
         self._active: dict[str, Any] | None = None
+        self._exposure_deadline = 0.0
         self._latest_image: np.ndarray | None = None
         self._latest_capture: dict[str, Any] | None = None
         # Last trustworthy temperature reading, for stale/invalid semantics.
@@ -150,6 +152,7 @@ class ZwoDetectorDriver:
                 "started_at": utc_now_iso(),
             }
             session.start_exposure(dark=frame_type.strip().lower() == "dark")
+            self._exposure_deadline = time.monotonic() + active["actual_exp_time_s"]
             self._active = active
             return {
                 **active,
@@ -167,17 +170,27 @@ class ZwoDetectorDriver:
                 raise RuntimeError(f"ZWO exposure ended with status={status!r}")
             return self._readout(early_stop=False)
 
-    def stop_exposure_and_readout(self) -> dict[str, Any]:
+    def ensure_readout_ready(self) -> None:
+        """Reject premature Finish without blocking Abort for a long integration."""
         with self._lock:
             self._require_active()
-            session = self._require_session()
-            session.stop_exposure()
-            if session.exposure_status() != "success":
-                self._active = None
-                raise RuntimeError(
-                    "the ZWO SDK did not retain a readable frame after early stop"
+            if time.monotonic() < self._exposure_deadline - 0.1:
+                raise InvalidStateError(
+                    "Exposure is still integrating; wait for automatic readout or use Abort.",
+                    subsystem="detector",
                 )
-            return self._readout(early_stop=True)
+
+    def stop_exposure_and_readout(self) -> dict[str, Any]:
+        self.ensure_early_readout_supported()
+
+    def ensure_early_readout_supported(self) -> None:
+        # Snap-mode Stop has no verified retained-image contract. Do not
+        # destroy an integration in an attempt to implement Stop & Readout.
+        raise UnsupportedError(
+            "Retained early readout is not supported by this ZWO snap adapter; "
+            "wait for normal readout or use Abort to discard the exposure.",
+            subsystem="detector",
+        )
 
     def _readout(self, *, early_stop: bool) -> dict[str, Any]:
         active = self._require_active()
@@ -315,11 +328,18 @@ class ZwoDetectorDriver:
     def get_status(self) -> dict[str, Any]:
         with self._lock:
             session = self._session
-            exposure_state = (
-                session.exposure_status()
-                if session is not None and self._active is not None
-                else "idle"
-            )
+            error = None
+            cooling = None
+            exposure_state = "idle"
+            if session is not None:
+                try:
+                    if self._active is not None:
+                        exposure_state = session.exposure_status()
+                    if self.descriptor.cooler:
+                        cooling = self.cooling_status()
+                except Exception as exc:
+                    error = f"{type(exc).__name__}: {exc}"
+                    exposure_state = "unavailable"
             return {
                 "device_id": self.config.device_id,
                 "role": "science",
@@ -327,12 +347,13 @@ class ZwoDetectorDriver:
                 "model": self.descriptor.name,
                 "serial": self.detected_serial or self.config.serial,
                 "state": exposure_state,
-                "connected": session is not None,
+                "connected": session is not None and error is None,
+                "error": error,
                 "active_exposure": dict(self._active) if self._active else None,
                 "latest_capture": dict(self._latest_capture)
                 if self._latest_capture
                 else None,
-                "cooling": self.cooling_status() if session is not None else None,
+                "cooling": cooling,
             }
 
     def _frame_metadata(self) -> DetectorFrameMetadata:

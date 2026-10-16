@@ -1,375 +1,149 @@
 # ICS Beta
 
-Campus-integration branch of the long-slit Instrument Control System.
+ICS Beta is an attended acquisition and development platform for a small
+spectrograph on a 50 cm telescope. It is distinct from the eventual JUST ICS.
+The beta slit and lamps are manually operated; their simulator adapters remain
+available. The current ZWO cameras are deployment choices, not architectural
+requirements for future detectors.
 
-ICS Beta inherits the ICS 2.0 backbone and keeps its existing operator-console
-layout. Its purpose is to run the smallest useful campus observing loop with one
-science camera, one optional slit/guide camera, and a manually operated compact
-spectrograph.
+## Verified baseline (2026-10-16)
 
-## Current baseline
+The integrated candidate retains main's generic device/role contracts, FITS
+publication and durable sequence recovery, and incorporates the useful
+`stable/2026-10-15` snapshot features with acquisition-lifecycle repairs.
 
-Current code baseline: simulator-backed operator workflows, closed science-FITS
-contract, schema-v2 device/role topology, durable operator-stepped sequence
-state, conservative restart recovery, and a standalone hardware-verified ZWO
-RAW16 detector path awaiting managed Runtime/API ownership.
+- Simulator single/sequence workflows; automatic per-exposure readout by default.
+- Operator starts each sequence step; there is no unattended auto-advance.
+- Managed ZWO RAW16 science acquisition and independent slit/guide JPEG preview.
+- Serial-based dual-camera binding with discovery completed before acquisition.
+- Runtime-owned, generation-guarded readout tasks; serialized transitions.
+- Reload rejects armed/active exposures and non-terminal sequences.
+- SDK native-call timeout quarantine: no further native calls in that process
+  after an unresolved timeout or native access violation; restart is required.
+- Windows PnP hotplug observation without re-enumerating an active vendor SDK.
+- Explicit simulation opt-in. A missing configured real science camera blocks
+  acquisition; it does not silently become a simulated detector.
+- Optional FITS/PNG persistence, save-last-frame, output-location selection,
+  operator instrument context and exposure provenance.
 
-Validation baseline:
+Validation: **423 automated tests passed**. A real ASI294MC Pro + ASI678MC bench
+acceptance passed through FastAPI, including independent Astropy FITS validation,
+concurrent guide preview, abort/replacement, sequences, reload and shutdown/restart.
+See `docs/project_status.md` for evidence, limits and integration provenance.
 
-```text
-pytest -q --basetemp .pytest-tmp
-322 passed
-```
+ZWO retained early readout is explicitly unsupported in the current snap adapter.
+Stop & Readout returns a command rejection while preserving automatic completion;
+Abort discards the exposure. Premature Finish is rejected without cancelling the
+automatic timer. Simulation retains its early-readout contract.
 
-Current default UI behavior:
-
-```text
-/ui        -> v7.1 operator-console prototype
-/ui/v7     -> v7.1 explicit operator-console prototype
-/ui/v5     -> v5 fallback shell
-/ui/legacy -> v5 fallback alias
-/ui/v6     -> v6 review shell
-```
-
-`/ui` and `/ui/v7` load the complete operator-safe v7 runtime by default. Observe keeps the instrument-facing layout: a slit/guide preview above three B/G/R science panes, with Single/Sequence controls on the right. During beta development the B/G/R panes deliberately mirror the same completed shared science-camera readout; the three-pane structure and logical-channel endpoints are retained for the future independent cameras. The science acquisition path has no separate preview lifecycle.
-
-## What works now
-
-The current repository supports simulator-backed single-exposure and operator-stepped multi-exposure loops with auditable command feedback:
-
-```text
-Setup / Instrument context
-  -> Observation preview
-  -> backend readiness gate
-  -> arm
-  -> start physical-camera exposure
-  -> finish or early stop/readout
-  -> optional FITS + PNG quicklook when save_requested=true
-  -> ExposureRecord / available or not_requested DataProductRef
-  -> read-only observatory context visibility
-  -> v7 Observe command summary
-  -> raw JSON diagnostics when needed
-```
-
-Multi-exposure plans reuse that same loop for every step:
-
-```text
-ObservationPlan -> side-effect-free SequencePreview -> load
-  -> start current step -> finish or early stop/readout
-  -> ExposureRecord -> next step
-  -> optional pause/resume or abort
-```
-
-Exposure completion is explicitly operator-driven in this baseline. `Start`
-enters the exposing state but does not schedule `Finish` when `exp_time_s`
-elapses; the operator uses Finish or Stop & Readout. Timer ownership, automatic
-readout, and timeout handling remain deferred; restart recovery is conservative
-and never assumes that an interrupted exposure completed.
-
-Implemented capabilities include:
-
-- FastAPI backend under `/api/v1/*`.
-- Request ID middleware and structured API error responses.
-- Runtime, subsystem state, exposure state, job tracking, and latest-job visibility.
-- Setup/session context domain model, service, JSON store, and API.
-- Setup context snapshot handoff into observation metadata.
-- Slit width and slit-angle API surfaces.
-- Calibration mode/lamp API surfaces and simulator state.
-- Detector configuration visibility and guarded mutation.
-- Preset catalog, preview, guarded apply, risk/confirmation metadata, and observation metadata linkage.
-- Observation single-exposure lifecycle: arm, start, finish, stop/readout, abort/discard.
-- `ObservationPlan`, `SequencePreview`, versioned JSON sequence state, atomic saves, saved-plan frame-index reservation, and auditable load/start/finish-step/pause/resume/abort commands.
-- Conservative restart reconciliation with `recovery_required`, local FITS/PNG existence and FITS checksum checks, Retry Current Step, Abort, and Mark Failed.
-- Backend ownership guard preventing direct single-exposure commands from competing with an active sequence.
-- Side-effect-free observation preview contract.
-- Backend arm gate based on current readiness preview.
-- Observation command feedback contract for success, blocked, and failed command results.
-- Stateful science-camera lifecycle: start, finish/readout, early stop/readout,
-  and abort.
-- Explicit per-acquisition `save_requested` policy, default off; unsaved readouts remain available as the latest in-memory science image and do not consume file indices.
-- One physical science camera bridged to the existing logical B/G/R channels.
-- Three persistent B/G/R science display panes and stable logical-channel image endpoints; the beta bridge marks their currently shared science-camera source instead of hiding the final instrument topology.
-- Independent simulated slit/guide-camera live preview with explicit start/stop state; it never writes data products and remains available during science acquisition.
-- Actual local FITS files and PNG quicklooks in simulation mode when persistence is requested.
-- Standards-readable unsigned-16 FITS with atomic no-overwrite publication,
-  stable frame types, requested/actual timing, detector/CFA/cooling metadata,
-  checksums, sizes, and independent Astropy validation.
-- ExposureRecord provenance for the physical camera, logical channels, shared
-  capture ID, checksum, and file URI.
-- Camera schema v2 profiles under `config/`, with physical devices separated
-  from deployment role bindings, legacy v1 migration, generic logical channel
-  names, and an optional slit camera.
-- Standalone ZWO SDK discovery/control/cooling and full-frame RAW16 acquisition
-  through the normal ICS adapter and FITS/quicklook writer; the 2026-08-22
-  ASI294MC Pro hardware smoke test passed without ASIImg/ASICap at runtime.
-- Read-only `/api/v1/observatory/context` for OCS/TCS/telescope/dome/weather/guider visibility with unavailable/stale-ready semantics reserved.
-- `/api/v1/status/full` includes observatory context and latest exposure-record visibility.
-- Simulator adapter contract tests for detector, slit, and calibration behavior.
-- v7 operator workflow runtime enabled across Setup, Instrument, Presets, Observe, sequence progress, exposure-record summaries, and Diagnostics.
-- v7 route/runtime tests and API contract tests.
-
-## What is not implemented yet
-
-The repository intentionally does not yet implement:
-
-- unattended/background sequence scheduling, timed auto-advance, automatic retry, or automatic mid-exposure resume;
-- timer-driven automatic completion/readout for a started exposure;
-- durable DataProduct database or archive pipeline;
-- OCS adapter;
-- TCS telescope control;
-- real TCS readiness integration;
-- telescope pointing, rotator, guider, dome, weather, or safety authority;
-- managed Runtime/FastAPI lifecycle and API exposure for the proven standalone
-  ZWO detector driver;
-- independent physical B/G/R cameras (the beta bridge intentionally shares one);
-- closed-loop guiding;
-- role-based authentication and operator/engineer permission separation;
-- real hardware communication protocols.
-
-These are future phases. They should enter through contracts and adapters, not direct UI shortcuts.
-
-## Quick start
-
-Install for local development:
+## Development and startup
 
 ```powershell
-python -m pip install -U pip
-pip install -e ".[dev]"
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m pytest -q --basetemp var/pytest
 ```
 
-Run tests:
+Simulation server:
 
 ```powershell
-pytest -q
+.\.venv\Scripts\python.exe -m uvicorn justls.ics.app.main:app --app-dir src --host 127.0.0.1 --port 8123
 ```
 
-Run backend:
+Open `http://127.0.0.1:8123/ui` or `/ui/v7`. `/ui/v5` and `/ui/legacy` are
+fallback shells; `/ui/v6` is a review shell. Use backend-served pages.
+
+Explicit real dual-camera deployment (set the SDK path for this machine):
 
 ```powershell
-python -m uvicorn justls.ics.app.main:app --app-dir src --reload
+.\start_ics.ps1 -SdkLibrary "C:\vendor\ASICamera2.dll" -NoBrowser
 ```
 
-Open:
+The launcher uses `.venv\Scripts\python.exe` or a non-Store Python on PATH;
+`-Python` selects another interpreter. It refuses an occupied port and never
+kills another process. `-ForceSim` explicitly selects simulation; missing SDK
+paths do not silently enable simulation. No ASIStudio capture application is
+required at runtime. Close competing vendor camera sessions before acquisition.
 
-```text
-http://127.0.0.1:8000/docs
-http://127.0.0.1:8000/ui
-http://127.0.0.1:8000/ui/v7
-```
+## Camera profiles and local state
 
-Use backend-served UI routes rather than opening HTML files directly. This keeps API calls, runtime scripts, and static assets on the same origin.
+Default: `config/cameras.sim.json`. Override with `ICS_BETA_CAMERA_CONFIG`.
 
-## Camera profiles and data
+- `cameras.zwo.example.json`: generic vendor template.
+- `cameras.lhires-asi294.example.json`: one SCI camera.
+- `cameras.lhires-dual-zwo.example.json`: this bench's ASI294 science + ASI678 guide.
 
-The default profile is:
+Schema v2 separates physical devices from science/slit role bindings. This beta
+profile has one SCI channel. The inherited B/G/R UI panes remain compatibility
+views of the same readout, not three independent cameras; broader UI topology
+work is deferred.
 
-```text
-config/cameras.sim.json
-```
+`ICS_BETA_DATA_ROOT` overrides the profile/operator-selected output root.
+Saved frames use `var/data/YYYYMMDD/<obs-id>/` by default. Unsaved captures stay
+in memory and do not reserve file indices. Saved single exposures reserve at
+Arm; saved sequences reserve their range at Load. FITS uses unsigned-16 raw
+pixels, honest simulated provenance and atomic no-overwrite publication.
+Quicklook display conversion does not alter the primary science pixels.
 
-It is a schema-v2 simulated B/G/R compatibility profile. Override it with:
-
-```powershell
-$env:ICS_BETA_CAMERA_CONFIG="C:\path\to\camera-profile.json"
-$env:ICS_BETA_DATA_ROOT="D:\observations\ics-beta"
-```
-
-`config/cameras.zwo.example.json` is a generic vendor template.
-`config/cameras.lhires-asi294.example.json` is the non-default campus
-50 cm/Lhires/ASI294 deployment example with one logical `SCI` channel. Selecting
-`driver: "zwo"` in the main Runtime still fails clearly because managed
-startup/shutdown and API integration are the active next boundary; it does not
-mean the low-level driver is absent.
-
-Configure the machine-local SDK path, then use the read-only discovery and
-explicit hardware smoke commands:
-
-```powershell
-$env:ICS_ZWO_SDK_LIBRARY = "C:\path\to\ASICamera2.dll"
-python -m justls.ics.drivers.zwo.probe
-python -m justls.ics.drivers.zwo.probe --controls
-python -m justls.ics.drivers.zwo.capture --data-root "var\hardware-smoke" --exposure-s 0.01 --gain 0 --offset 30 --frame-type test
-```
-
-The first command is read-only. `--controls` opens/initializes the camera and
-reads values. The capture command writes a real FITS and quicklook. ASIStudio,
-ASIImg, and ASICap are reference tools only; the runtime dependency is the ZWO
-driver/SDK library.
-
-Simulation products are real local files, but their FITS metadata and
-ExposureRecord remain marked `SIMULATE=true` / `simulated=true`. The default
-output directory is ignored by Git:
-
-```text
-var/data/YYYYMMDD/<obs-id>/*.fits
-var/data/YYYYMMDD/<obs-id>/*-quicklook.png
-```
-
-Operator setup and sequence recovery state use local, ignored JSON files:
+Default local files (ignored by Git):
 
 ```text
 .justls/setup_context.json
 .justls/sequence_execution.json
+.justls/instrument_context.json
+.justls/output_location.json
 ```
 
-Override them with `JUSTLS_SETUP_CONTEXT_PATH` and
-`JUSTLS_SEQUENCE_STATE_PATH`. The sequence file is an operational recovery
-artifact, not a portable plan template; do not edit it while ICS Beta is
-running. This Lite store assumes one ICS Beta server process; do not point
-multiple Uvicorn workers or independent processes at the same sequence file.
+Override paths with `JUSTLS_SETUP_CONTEXT_PATH`, `JUSTLS_SEQUENCE_STATE_PATH`,
+`JUSTLS_INSTRUMENT_CONTEXT_PATH`, and `JUSTLS_OUTPUT_LOCATION_PATH` respectively.
+Run only one ICS server process per device set and state directory. Do not use
+Uvicorn multiple workers or hardware development auto-reload.
 
-## Runtime defaults
+`JUSTLS_AUTO_READOUT_ENABLED=0` disables automatic completion for manual/scripted
+operation. `ICS_BETA_FORCE_SIM=1` explicitly replaces camera drivers with simulation.
+`JUSTLS_SLIT_PREVIEW_AUTOSTART=0` disables guide-preview autostart.
+`ICS_BETA_HOTPLUG_INTERVAL_S=0` disables OS hotplug monitoring.
+See `.env.example` and `docs/operator_runbook.md`.
 
-Default v7 behavior:
+## Explicit hardware acceptance
 
-```text
-JUSTLS_UI_V7_RUNTIME_ENABLED         default: on
-JUSTLS_UI_V7_RUNTIME_STATUS_ENABLED  default: on
-JUSTLS_UI_V7_SETUP_RUNTIME_ENABLED   default: on
-JUSTLS_UI_V7_INSTRUMENT_RUNTIME_ENABLED default: on
-JUSTLS_UI_V7_PRESET_RUNTIME_ENABLED default: on
-JUSTLS_UI_V7_OBSERVE_RUNTIME_ENABLED default: on
-JUSTLS_UI_V7_OBSERVE_GUARD_ENABLED   default: on
-```
-
-To force the v7 static shell:
+Read-only discovery, then optional open/read-controls/close:
 
 ```powershell
-$env:JUSTLS_UI_V7_RUNTIME_ENABLED="0"
+.\.venv\Scripts\python.exe -m justls.ics.drivers.zwo.probe --dll "C:\vendor\ASICamera2.dll"
+.\.venv\Scripts\python.exe -m justls.ics.drivers.zwo.probe --dll "C:\vendor\ASICamera2.dll" --controls
 ```
 
-Individual modules can still be disabled for troubleshooting:
+The following explicitly acquires real engineering frames using the supplied
+ASI294/ASI678 serial profile. It writes an isolated JSON report and FITS files,
+uses normal FastAPI lifecycle and endpoints, and releases cameras on exit:
 
 ```powershell
-$env:JUSTLS_UI_V7_INSTRUMENT_RUNTIME_ENABLED="0"
-$env:JUSTLS_UI_V7_PRESET_RUNTIME_ENABLED="0"
-$env:JUSTLS_UI_V7_SETUP_RUNTIME_ENABLED="0"
+.\.venv\Scripts\python.exe tools/hardware_acceptance.py --hardware --dll "C:\vendor\ASICamera2.dll"
 ```
 
-## API overview
+It does not change cooler settings or physically unplug devices. Automated
+regressions cover injected timeout/disconnect/storage failures. Real cable-loss
+and power-loss behavior and on-sky usability remain separate acceptance work.
 
-Representative current endpoints:
+## API and development boundaries
 
-```text
-GET  /api/v1/health
-GET  /api/v1/status
-GET  /api/v1/status/full
-GET  /api/v1/capabilities
-GET  /api/v1/observatory/context
-GET  /api/v1/cameras/status
-POST /api/v1/cameras/slit/preview/start
-POST /api/v1/cameras/slit/preview/stop
-GET  /camera/slit/latest.jpg
-GET  /camera/{b|g|r}/latest.jpg  -> stable logical channels; same shared science-camera readout during beta
+FastAPI contracts: `/docs`; status: `/api/v1/status/full` and
+`/api/v1/cameras/status`. Observation preview is side-effect-free; Arm reruns
+readiness. Commands carry request/job feedback; exposure records carry product
+and physical-camera provenance. Sequence state is durable; interrupted active
+steps require explicit recovery, never automatic mid-exposure resume.
 
-GET  /api/v1/setup/context
-PUT  /api/v1/setup/context
-POST /api/v1/setup/context/reload
+Keep Domain / Kernel / Application / API / UI / Adapter boundaries. Backend
+ownership guards remain authoritative. Real science, simulated actuators and
+operator-declared settings must not be confused. There is no OCS/TCS control,
+closed-loop guiding or unattended scheduler in this milestone.
 
-POST /api/v1/slit
-POST /api/v1/slit_angle
+Durable documentation:
 
-GET  /api/v1/calibration/status
-POST /api/v1/calibration/mode
-POST /api/v1/calibration/lamp
+- `docs/project_status.md`: current evidence, provenance and next boundaries.
+- `docs/operator_runbook.md`: startup and recovery.
+- `docs/ics2_software_development_strategy.md`: broader development strategy.
+- `docs/operator_console_requirements.md`: console requirements and constraints.
 
-GET  /api/v1/detector/config
-POST /api/v1/detector/config
-
-GET  /api/v1/observation/status
-POST /api/v1/observation/preview
-POST /api/v1/observation/arm
-POST /api/v1/observation/start
-POST /api/v1/observation/finish
-POST /api/v1/observation/stop_readout
-POST /api/v1/observation/abort_discard
-
-POST /api/v1/observation/sequence/preview
-GET  /api/v1/observation/sequence/status
-POST /api/v1/observation/sequence/load
-POST /api/v1/observation/sequence/start
-POST /api/v1/observation/sequence/finish_step
-POST /api/v1/observation/sequence/stop_readout_step
-POST /api/v1/observation/sequence/pause
-POST /api/v1/observation/sequence/resume
-POST /api/v1/observation/sequence/abort
-POST /api/v1/observation/sequence/retry_current_step
-POST /api/v1/observation/sequence/mark_failed
-
-GET  /api/v1/presets
-POST /api/v1/presets/preview
-POST /api/v1/presets/apply
-```
-
-Important contract split:
-
-```text
-GET  /observation/status  -> current observation state
-POST /observation/preview -> side-effect-free readiness/validation preview
-POST observation commands -> ObservationCommandFeedbackResponse
-latest_exposure_record -> exposure lifecycle + data-product reference contract
-```
-
-Preview is advisory. Arm is an independent command. Every Arm call reruns the backend readiness gate.
-
-Sequence preview is also advisory and side-effect-free. Loading rechecks every
-step and saves sequence state under
-`.justls/sequence_execution.json` by default. Each sequence start reruns the
-single-exposure backend arm gate. The executor remains operator-stepped and has
-no background timer. A restart during an active step enters `recovery_required`;
-retry is blocked whenever a possible FITS already exists.
-
-`save_requested` defaults to false for both Single and Sequence. A saved Single
-reserves one file index at Arm; a saved Sequence reserves its full range at
-Load. Unsaved acquisitions do not consume file indices. The save choice is
-frozen while an exposure or non-terminal sequence owns the science detector.
-
-## Documentation map
-
-Current durable docs:
-
-```text
-docs/project_status.md
-docs/ics2_software_development_strategy.md
-docs/operator_console_requirements.md
-```
-
-Use them as follows:
-
-- `README.md`: current repository entry point.
-- `docs/project_status.md`: current status snapshot and next-step boundary.
-- `docs/ics2_software_development_strategy.md`: software strategy, architecture, roadmap, and documentation policy.
-- `docs/operator_console_requirements.md`: operator-console requirements, hardware facts, capability visibility, and UI responsibility boundaries.
-
-Avoid adding one-off phase notes. If a decision remains useful, fold it into one of the durable documents.
-
-## Test layout
-
-```text
-tests/api/          API behavior and response contracts
-tests/application/  application services and use-case contracts
-tests/adapters/     simulator adapter parity contracts
-tests/drivers/      vendor SDK/driver contract tests
-tests/infra/        configuration and FITS publication contracts
-tests/domain/       domain models and validation
-tests/kernel/       runtime, job, state, and guard behavior
-tests/ui/           UI routes, static shells, static assets, runtime gates
-```
-
-Prefer boundary-specific tests. Do not add new root-level temporary test files for phase work.
-
-## Development guardrails
-
-Every meaningful change should preserve:
-
-- contract-first development;
-- simulation parity with future real hardware;
-- backend safety authority over frontend assumptions;
-- request ID / latest job / error visibility;
-- clear Domain / Kernel / Application / API / UI / Adapter boundaries;
-- honest labeling of simulated, unavailable, placeholder, and real capabilities;
-- no telescope/OCS/TCS authority overreach.
-
-## License
-
-If no `LICENSE` file is present, treat this repository as internal until a license is chosen.
+If no LICENSE exists, treat this repository as internal until one is chosen.

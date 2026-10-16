@@ -135,6 +135,19 @@ def test_probe_exception_is_captured_in_last_error() -> None:
     assert monitor.status_dict()["last_error"] is not None
 
 
+def test_initial_probe_error_is_not_erased():
+    monitor = HotplugMonitor(_RaisingProbe('initial USB error'))
+    assert 'initial USB error' in monitor.status_dict()['last_error']
+
+
+def test_os_monitor_does_not_call_vendor_enumeration(monkeypatch):
+    from justls.ics.infra.hotplug import make_probe
+    from types import SimpleNamespace
+    monkeypatch.setattr('justls.ics.infra.windows_usb.zwo_camera_count', lambda: 2)
+    sdk = SimpleNamespace(connected_camera_count=lambda: pytest.fail('active SDK enumerated'))
+    assert make_probe(sdk)() == 2
+
+
 def test_stop_terminates_background_thread_quickly() -> None:
     # Use a long interval so the test would hang for 60s without a fast stop.
     probe = _CountingProbe(2)

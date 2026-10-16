@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
 from justls.ics.app.api.dependencies import RuntimeDep
+from justls.ics.kernel.errors import InvalidStateError
 
 
 router = APIRouter(tags=["cameras"])
@@ -45,7 +46,9 @@ def reload_cameras(runtime: RuntimeDep) -> dict:
     from justls.ics.kernel.runtime import reset_runtime
 
     try:
-        new_runtime = reset_runtime()
+        new_runtime = reset_runtime(expected=runtime)
+    except InvalidStateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("camera reload failed")
         raise HTTPException(
@@ -98,14 +101,18 @@ def get_slit_camera_preview(runtime: RuntimeDep) -> Response:
 def start_slit_camera_preview(runtime: RuntimeDep) -> dict:
     if runtime.slit_camera is None:
         raise HTTPException(status_code=503, detail="Slit camera is unavailable.")
-    return runtime.slit_camera.start_preview()
+    with runtime.sequence_lock:
+        runtime.require_open()
+        return runtime.slit_camera.start_preview()
 
 
 @router.post("/api/v1/cameras/slit/preview/stop")
 def stop_slit_camera_preview(runtime: RuntimeDep) -> dict:
     if runtime.slit_camera is None:
         raise HTTPException(status_code=503, detail="Slit camera is unavailable.")
-    return runtime.slit_camera.stop_preview()
+    with runtime.sequence_lock:
+        runtime.require_open()
+        return runtime.slit_camera.stop_preview()
 
 
 def _science_channel_response(runtime: RuntimeDep, logical_channel: str) -> Response:

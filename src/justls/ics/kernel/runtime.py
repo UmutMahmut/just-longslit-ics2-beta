@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import RLock
-from typing import Any
+from typing import Any, Callable
 
 from justls.ics.adapters.camera.adapter import PreviewCameraAdapter
 from justls.ics.adapters.detector.adapter import DetectorAdapter, SimDetectorAdapter
@@ -32,7 +32,8 @@ from justls.ics.infra.camera_config import (
 )
 from justls.ics.infra.data_products import LocalDataProductWriter
 from justls.ics.infra.hotplug import HotplugMonitor, make_probe
-from justls.ics.kernel.errors import ICSException
+from justls.ics.infra.exposure_auto_readout import AutoReadoutScheduler
+from justls.ics.kernel.errors import ICSException, InvalidStateError
 from justls.ics.kernel.jobs import CommandRequest, JobRecord, JobTracker
 from justls.ics.kernel.states import (
     ControlState,
@@ -140,6 +141,10 @@ class Runtime:
     sequence_persistence_path: str | None = None
     sequence_persistence_error: str | None = None
     sequence_lock: RLock = field(default_factory=RLock, repr=False)
+    readout_scheduler: AutoReadoutScheduler = field(default_factory=AutoReadoutScheduler, repr=False)
+    acquisition_generation: int = 0
+    closed: bool = False
+    science_camera_error: str | None = None
     started_at: datetime = field(default_factory=utc_now)
     # Background hot-plug monitor (None when the runtime is fully simulated or
     # when no ZWO driver successfully bound). The monitor is advisory: it only
@@ -201,7 +206,57 @@ class Runtime:
             setter(resolved)
         return self.data_root
 
+    def require_open(self) -> None:
+        if self.closed:
+            raise InvalidStateError("Runtime was released; retry against the current runtime.")
+
+    def cancel_readout(self) -> None:
+        # Called under sequence_lock, also used by all acquisition transitions.
+        self.acquisition_generation += 1
+        self.readout_scheduler.cancel()
+
+    def schedule_readout(self, *, duration_s: float, callback: Callable, description: str) -> None:
+        self.cancel_readout()
+        generation = self.acquisition_generation
+
+        def complete_current() -> None:
+            with self.sequence_lock:
+                if self.closed or generation != self.acquisition_generation:
+                    return
+                result = callback()
+                job = getattr(result, "job", None)
+                if job is not None and job.status.value != "succeeded":
+                    raise RuntimeError(f"Automatic readout rejected or failed: {job.to_dict()}")
+
+        self.readout_scheduler.schedule(
+            duration_s=duration_s, callback=complete_current, description=description,
+        )
+
+    def reload_block_reason(self) -> str | None:
+        if self.detector is not None and self.detector.state in {
+            ExposureState.ARMED, ExposureState.EXPOSING, ExposureState.READING_OUT,
+        }:
+            return "An exposure owns the detector; finish or abort it before reloading."
+        sequence = self.sequence_execution
+        if sequence is not None and sequence.state.value not in {"completed", "aborted", "failed"}:
+            return "A sequence owns the detector; complete or abort it before reloading."
+        if self.sequence_persistence_error:
+            return "Sequence recovery state is unreadable; resolve it before reloading."
+        return None
+
     def shutdown(self) -> None:
+        with self.sequence_lock:
+            self._shutdown_locked()
+        # No transition lock while joining callbacks waiting to check generation.
+        self.readout_scheduler.join()
+
+    def _shutdown_locked(self) -> None:
+        if not self.closed:
+            self.closed = True
+            self.cancel_readout()
+            self._release_hardware()
+
+    def _release_hardware(self) -> None:
         """Managed teardown: abort in-flight exposures and release hardware.
 
         Hardware drivers (e.g. ZWO) hold exclusive OS handles on cameras;
@@ -226,7 +281,10 @@ class Runtime:
             driver = getattr(adapter, "driver", None)
             disconnect = getattr(driver, "disconnect", None)
             if callable(disconnect):
-                disconnect()
+                try:
+                    disconnect()
+                except Exception:
+                    logger.exception("science camera disconnect failed")
         if self.slit_camera is not None:
             driver = getattr(self.slit_camera, "driver", None)
             disconnect = getattr(driver, "disconnect", None)
@@ -267,6 +325,11 @@ class Runtime:
             "config_path": self.camera_config_path,
             "data_root": self.data_root,
             "science_camera": science,
+            "science_camera_error": self.science_camera_error,
+            "auto_readout": {
+                "active": self.readout_scheduler.active,
+                "last_error": self.readout_scheduler.last_error,
+            },
             "slit_camera": slit,
             "service": {
                 "force_sim": self.force_sim,
@@ -504,12 +567,9 @@ class RuntimeAssembler:
     def __init__(self, config: RuntimeConfig | None = None) -> None:
         self.config = config or RuntimeConfig()
         self._slit_camera_error: str | None = None
-        # Probe instance kept across detector + slit builds so the hotplug
-        # monitor (when started) reuses the same SDK handle and avoids an
-        # extra ``ASIGetNumOfConnectedCameras``-on-a-second-handle during the
-        # reload window. The actual probe closure is built by ``make_probe``
-        # with a final SDK instance; if either subsystem ends up taking the
-        # sim fallback the monitor is not started.
+        self._science_camera_error: str | None = None
+        # Share one discovery/serial cache for binding both physical roles.
+        # Runtime hotplug monitoring uses OS inventory rather than this SDK.
         self._zwo_sdk_for_monitor = None
 
     def build(self) -> Runtime:
@@ -534,6 +594,7 @@ class RuntimeAssembler:
             detector=detector_subsystem,
             slit_camera=slit_camera,
             slit_camera_error=self._slit_camera_error,
+            science_camera_error=self._science_camera_error,
             camera_config=camera_config,
             camera_config_path=str(camera_config_path),
             data_root=str(data_root),
@@ -579,6 +640,9 @@ class RuntimeAssembler:
             )
             runtime.set_subsystem_state("detector", ControlState.IDLE, message="ready")
             runtime.set_exposure_state(ExposureState.READY_TO_ARM)
+        elif self._science_camera_error:
+            runtime.set_subsystem_connected("detector", False, message=self._science_camera_error)
+            runtime.set_subsystem_state("detector", ControlState.FAULT, message=self._science_camera_error)
 
         # Hot-plug monitor: only when at least one ZWO driver successfully
         # bound to real hardware, and the operator has not disabled it via
@@ -589,7 +653,6 @@ class RuntimeAssembler:
             monitor = HotplugMonitor(
                 make_probe(self._zwo_sdk_for_monitor),
                 interval_s=interval_s,
-                initial_count=self._zwo_sdk_for_monitor.connected_camera_count(),
             )
             monitor.start()
             runtime.hotplug_monitor = monitor
@@ -693,28 +756,9 @@ class RuntimeAssembler:
             try:
                 driver, sdk = build_zwo_detector_driver(science_camera, return_sdk=True)
             except Exception as exc:
-                # The ZWO SDK can hang when a camera is in a bad USB state
-                # (for example after a hot-replug). The service must still
-                # come up so the operator can diagnose and recover; we fall
-                # back to the simulated detector and surface the reason.
-                logger.error(
-                    "science camera unavailable; falling back to simulated "
-                    "detector: %s",
-                    exc,
-                )
-                self._slit_camera_error = (
-                    f"science camera unavailable: {exc}"
-                )
-                driver = SimDetectorDriver(science_camera)
-                return DetectorSubsystem(
-                    adapter=SimDetectorAdapter(
-                        driver,
-                        writer=self._build_data_product_writer(),
-                        logical_channels=tuple(
-                            self._camera_config.logical_science_channels
-                        ),
-                    )
-                )
+                self._science_camera_error = f"science camera unavailable: {exc}"
+                logger.error(self._science_camera_error)
+                return None
             self._zwo_sdk_for_monitor = sdk
             adapter = DetectorAdapter(
                 driver,
@@ -753,7 +797,7 @@ class RuntimeAssembler:
 
             try:
                 driver, sdk = build_zwo_preview_driver(
-                    slit_camera, role="slit", return_sdk=True
+                    slit_camera, sdk=self._zwo_sdk_for_monitor, role="slit", return_sdk=True
                 )
             except Exception as exc:
                 # The guide camera is an operator aid, not the science path. A
@@ -784,28 +828,41 @@ class RuntimeAssembler:
 
 
 _default_runtime: Runtime | None = None
+_runtime_lock = RLock()
 
 
 def get_runtime() -> Runtime:
     global _default_runtime
-    if _default_runtime is None:
-        _default_runtime = RuntimeAssembler().build()
-    return _default_runtime
+    with _runtime_lock:
+        if _default_runtime is None:
+            _default_runtime = RuntimeAssembler().build()
+        return _default_runtime
 
 
-def reset_runtime() -> Runtime:
+def reset_runtime(*, expected: Runtime | None = None) -> Runtime:
     global _default_runtime
-    if _default_runtime is not None:
-        # Release hardware handles before discarding the old runtime,
-        # otherwise a config reload leaks the exclusive camera session.
-        _default_runtime.shutdown()
-    _default_runtime = RuntimeAssembler().build()
-    return _default_runtime
+    with _runtime_lock:
+        previous = _default_runtime
+        if expected is not None and previous is not expected:
+            raise InvalidStateError("Runtime changed during reload; refresh and retry.")
+        if previous is not None:
+            with previous.sequence_lock:
+                if expected is not None:
+                    reason = previous.reload_block_reason()
+                    if reason:
+                        raise InvalidStateError(reason)
+                previous._shutdown_locked()
+            previous.readout_scheduler.join()
+        # A failed rebuild must not leave a released singleton available.
+        _default_runtime = None
+        _default_runtime = RuntimeAssembler().build()
+        return _default_runtime
 
 
 def shutdown_runtime() -> None:
     """Release the default runtime's hardware handles, if one was built."""
     global _default_runtime
-    if _default_runtime is not None:
-        _default_runtime.shutdown()
-        _default_runtime = None
+    with _runtime_lock:
+        if _default_runtime is not None:
+            _default_runtime.shutdown()
+            _default_runtime = None

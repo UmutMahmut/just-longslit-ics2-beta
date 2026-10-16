@@ -14,8 +14,11 @@ from __future__ import annotations
 
 import logging
 import os
-import threading
+import sys
 from pathlib import Path
+from justls.ics.drivers.zwo.native_calls import (
+    SDK_HARDWARE_TIMEOUT_S, ZwoHardwareTimeoutError, _run_with_watchdog,
+)
 
 from justls.ics.drivers.zwo.sdk import (
     ZwoCameraDescriptor,
@@ -26,61 +29,6 @@ from justls.ics.drivers.zwo.sdk import (
 
 logger = logging.getLogger(__name__)
 
-
-# A timeout (in seconds) for each high-level ZWO SDK call that touches USB.
-# The vendor library will hang indefinitely if a camera is in a bad USB
-# state (lost packets, half-replugged, etc.). We bound it so a single bad
-# device cannot take the whole ICS service down.
-SDK_HARDWARE_TIMEOUT_S = 8.0
-
-
-class ZwoHardwareTimeoutError(ZwoSdkError):
-    """Raised when a ZWO SDK call exceeded the watchdog timeout."""
-
-    def __init__(self, op_label: str, timeout_s: float) -> None:
-        super().__init__(op_label, code=-1)
-        self.op_label = op_label
-        self.timeout_s = timeout_s
-
-    def __str__(self) -> str:  # pragma: no cover - cosmetic
-        return f"{self.op_label} did not return within {self.timeout_s:g}s"
-
-
-def _run_with_watchdog(op_label: str, fn, *, timeout_s: float = SDK_HARDWARE_TIMEOUT_S):
-    """Run a synchronous ZWO SDK call under a hard timeout.
-
-    Python cannot interrupt a blocked ctypes call, but the SDK typically
-    returns within a fraction of a second when the USB stack is healthy.
-    A hang therefore implies a stuck device, and we want the caller to be
-    able to surface that and fall back (e.g. to the simulated driver) instead
-    of leaving the whole runtime deadlocked.
-    """
-
-    holder: dict[str, BaseException] = {}
-
-    def runner() -> None:
-        try:
-            holder["value"] = fn()
-        except BaseException as exc:  # pragma: no cover - depends on SDK
-            holder["error"] = exc
-
-    thread = threading.Thread(
-        target=runner,
-        daemon=True,
-        name=f"zwo-watchdog:{op_label}",
-    )
-    thread.start()
-    thread.join(timeout_s)
-    if thread.is_alive():
-        logger.warning(
-            "zwo %s: watchdog timeout after %.1fs; camera likely in a bad USB state",
-            op_label,
-            timeout_s,
-        )
-        raise ZwoHardwareTimeoutError(op_label, timeout_s)
-    if "error" in holder:
-        raise holder["error"]
-    return holder.get("value")
 
 from justls.ics.drivers.zwo.detector_driver import ZwoDetectorDriver
 from justls.ics.drivers.zwo.preview_driver import ZwoPreviewCameraDriver
@@ -130,8 +78,13 @@ def _is_configured_serial(serial: str | None) -> bool:
 
 
 def _read_serial(sdk: ZwoSdk, descriptor: ZwoCameraDescriptor) -> str:
+    cache = getattr(sdk, "serial_by_camera_id", {})
+    if descriptor.camera_id in cache:
+        return cache[descriptor.camera_id]
     with sdk.open_camera(descriptor.camera_id) as session:
-        return session.serial_number()
+        serial = session.serial_number()
+    cache[descriptor.camera_id] = serial
+    return serial
 
 
 def select_camera_descriptor(
@@ -145,7 +98,12 @@ def select_camera_descriptor(
     error (silently exposing the wrong camera is worse than failing fast).
     USB enumeration order is only ever a discovery detail.
     """
-    cameras = sdk.discover()
+    # Enumerate once before opening either role. Enumeration is not a
+    # connectivity heartbeat while the SDK owns live USB sessions.
+    cameras = getattr(sdk, "binding_descriptors", None)
+    if cameras is None:
+        cameras = sdk.discover()
+        sdk.binding_descriptors = cameras
     if not cameras:
         raise RuntimeError(
             f"no ZWO cameras detected for device {config.device_id!r}: "
@@ -208,9 +166,7 @@ def build_zwo_detector_driver(
     """
     if sdk is None:
         sdk = ZwoSdk(resolve_sdk_library_path(sdk_library))
-    descriptor = _run_with_watchdog(
-        "select-science-camera", lambda: select_camera_descriptor(sdk, config)
-    )
+    descriptor = select_camera_descriptor(sdk, config)
     driver = ZwoDetectorDriver(
         sdk,
         descriptor,
@@ -220,7 +176,7 @@ def build_zwo_detector_driver(
         binning=int(config.binning),
     )
     try:
-        _run_with_watchdog("connect-science-camera", driver.connect)
+        driver.connect()
     except Exception:
         # Never leak an open camera if ROI/serial validation fails.
         try:
@@ -249,12 +205,10 @@ def build_zwo_preview_driver(
     """
     if sdk is None:
         sdk = ZwoSdk(resolve_sdk_library_path(sdk_library))
-    descriptor = _run_with_watchdog(
-        "select-guide-camera", lambda: select_camera_descriptor(sdk, config)
-    )
+    descriptor = select_camera_descriptor(sdk, config)
     driver = ZwoPreviewCameraDriver(sdk, descriptor, config, role=role)
     try:
-        _run_with_watchdog("connect-guide-camera", driver.connect)
+        driver.connect()
     except Exception:
         try:
             driver.disconnect()

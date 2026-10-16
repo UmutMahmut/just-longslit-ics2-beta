@@ -4,7 +4,6 @@ from functools import wraps
 from typing import Any
 
 from justls.ics.application.dispatcher import DispatchResult
-from justls.ics.application.services.exposure_auto_readout import AutoReadoutScheduler
 from justls.ics.application.services.observation_preview_service import (
     ObservationPreviewService,
 )
@@ -27,6 +26,7 @@ def _sequence_serialized(method):
     @wraps(method)
     def wrapper(self, *args, **kwargs):
         with self.runtime.sequence_lock:
+            self.runtime.require_open()
             return method(self, *args, **kwargs)
 
     return wrapper
@@ -47,10 +47,6 @@ class ObservationService:
             runtime,
             setup_context_service,
         )
-        # Hardware exposures must be read out when their timer expires; the
-        # operator should not have to click "finish" at exactly the right
-        # moment. Sequences schedule their own completion instead.
-        self._auto_readout = AutoReadoutScheduler()
 
     def get_exposure_status(self) -> dict:
         if self.runtime.detector is None:
@@ -398,7 +394,7 @@ class ObservationService:
         if not isinstance(exp_time_s, (int, float)) or exp_time_s <= 0:
             return
 
-        self._auto_readout.schedule(
+        self.runtime.schedule_readout(
             duration_s=float(exp_time_s),
             callback=self.finish,
             description=f"single-{armed.get('exp_id') or 'exposure'}",
@@ -406,7 +402,6 @@ class ObservationService:
 
     @_sequence_serialized
     def finish(self, *, sequence_owned: bool = False) -> DispatchResult:
-        self._auto_readout.cancel()
         self._enforce_sequence_ownership(sequence_owned=sequence_owned)
         request = CommandRequest.create(
             subsystem="detector",
@@ -414,11 +409,15 @@ class ObservationService:
             params={},
             source=CommandSource.API,
         )
-        return self.dispatcher.dispatch(request)
+        result = self.dispatcher.dispatch(request)
+        if result.job.status.value == "succeeded" or (
+            self.runtime.detector is not None and self.runtime.detector.state.value == "failed"
+        ):
+            self.runtime.cancel_readout()
+        return result
 
     @_sequence_serialized
     def stop_readout(self, *, sequence_owned: bool = False) -> DispatchResult:
-        self._auto_readout.cancel()
         self._enforce_sequence_ownership(sequence_owned=sequence_owned)
         request = CommandRequest.create(
             subsystem="detector",
@@ -426,12 +425,17 @@ class ObservationService:
             params={},
             source=CommandSource.API,
         )
-        return self.dispatcher.dispatch(request)
+        result = self.dispatcher.dispatch(request)
+        if result.job.status.value == "succeeded" or (
+            self.runtime.detector is not None and self.runtime.detector.state.value == "failed"
+        ):
+            self.runtime.cancel_readout()
+        return result
 
     @_sequence_serialized
     def abort_discard(self, *, sequence_owned: bool = False) -> DispatchResult:
-        self._auto_readout.cancel()
         self._enforce_sequence_ownership(sequence_owned=sequence_owned)
+        self.runtime.cancel_readout()
         request = CommandRequest.create(
             subsystem="detector",
             action="abort_discard",

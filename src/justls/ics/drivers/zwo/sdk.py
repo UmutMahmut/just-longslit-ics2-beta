@@ -7,6 +7,7 @@ import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
+from justls.ics.drivers.zwo.native_calls import GuardedLibrary, NativeCallGate, shared_gate
 
 
 ASI_SUCCESS = 0
@@ -270,11 +271,15 @@ class ZwoSdk:
 
     def __init__(self, dll_path: str | Path, *, library: Any | None = None) -> None:
         self.dll_path = Path(dll_path).expanduser().resolve()
+        real_library = library is None
         self._dll_dir_handle: Any | None = None
         if library is None:
             library, self._dll_dir_handle = _load_library(self.dll_path)
         self._library = library
         self._configure_signatures()
+        gate = shared_gate(os.path.normcase(str(self.dll_path))) if real_library else NativeCallGate()
+        self._library = GuardedLibrary(self._library, gate)
+        self.serial_by_camera_id: dict[int, str] = {}
 
     def _configure_signatures(self) -> None:
         self._library.ASIGetSDKVersion.argtypes = []

@@ -79,6 +79,7 @@ class SequenceRecoveryInfo(BaseModel):
         "interrupted_active_step",
         "completed_data_product_mismatch",
         "persistence_failure",
+        "acquisition_failure",
     ]
     interrupted_state: str
     interrupted_index: int = Field(ge=0)

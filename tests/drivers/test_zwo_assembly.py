@@ -101,6 +101,33 @@ def test_no_cameras_is_an_actionable_error() -> None:
         select_camera_descriptor(sdk, _device())
 
 
+def test_cached_serial_does_not_reopen_an_already_bound_camera():
+    sdk = _FakeSdk({1: 'SCI', 2: 'GUIDE'})
+    sdk.serial_by_camera_id = {1: 'SCI', 2: 'GUIDE'}
+
+    def unsafe_reopen(*args):
+        pytest.fail('selection reopened an already bound camera')
+
+    sdk.open_camera = unsafe_reopen
+    assert select_camera_descriptor(sdk, _device(serial='GUIDE')).camera_id == 2
+    sdk.discover = lambda: pytest.fail('enumerated while a camera was bound')
+    assert select_camera_descriptor(sdk, _device(serial='SCI')).camera_id == 1
+
+
+def test_missing_real_science_camera_does_not_become_simulated(monkeypatch, tmp_path):
+    def missing(*args, **kwargs):
+        raise RuntimeError('science camera unplugged')
+
+    monkeypatch.setattr('justls.ics.drivers.zwo.assembly.build_zwo_detector_driver', missing)
+    monkeypatch.setattr('justls.ics.kernel.runtime.load_camera_system_config',
+                        lambda path=None: (_zwo_camera_config(), tmp_path / 'config.json'))
+    runtime = RuntimeAssembler().build()
+    assert runtime.detector is None
+    assert 'unplugged' in runtime.get_camera_status_dict()['science_camera_error']
+    assert not runtime.system_state.detector.connected
+    runtime.shutdown()
+
+
 class _FakeZwoDriver:
     def __init__(self) -> None:
         self.disconnected = False

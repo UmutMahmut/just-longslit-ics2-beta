@@ -63,6 +63,10 @@ class DetectorSubsystem:
         self._observation_meta: ObservationMeta | None = None
         self._latest_exposure_record: dict | None = None
 
+    @property
+    def state(self) -> ExposureState:
+        return self._state
+
     def get_snapshot(self) -> ExposureSnapshot:
         return ExposureSnapshot(
             state=self._state,
@@ -72,6 +76,9 @@ class DetectorSubsystem:
             latest_exposure_record=self._latest_exposure_record,
             camera_status=self.adapter.get_status(),
         )
+
+    def mark_failed(self) -> None:
+        self._state = ExposureState.FAILED
 
     def arm(
         self,
@@ -161,6 +168,9 @@ class DetectorSubsystem:
                 details={"state": self._state.value},
             )
 
+        preflight = getattr(getattr(self.adapter, "driver", None), "ensure_early_readout_supported", None)
+        if callable(preflight):
+            preflight()
         return self._complete_exposure(early_stop=True)
 
     def finish_normal(self) -> ExposureSnapshot:
@@ -171,6 +181,9 @@ class DetectorSubsystem:
                 details={"state": self._state.value},
             )
 
+        preflight = getattr(getattr(self.adapter, "driver", None), "ensure_readout_ready", None)
+        if callable(preflight):
+            preflight()
         return self._complete_exposure(early_stop=False)
 
     def _complete_exposure(self, *, early_stop: bool) -> ExposureSnapshot:
