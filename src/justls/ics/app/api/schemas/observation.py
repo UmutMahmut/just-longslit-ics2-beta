@@ -26,6 +26,7 @@ ObservationCommandLiteral = Literal[
     "finish",
     "stop_readout",
     "abort_discard",
+    "save_last_frame",
 ]
 ObservationCommandStatusLiteral = Literal["succeeded", "blocked", "failed"]
 ObservationCommandBlockedReasonLiteral = Literal[

@@ -428,3 +428,41 @@ def abort_discard_observation(
         observation_service=observation_service,
         request_id=request_id,
     )
+
+
+@router.post(
+    "/observation/save_last_frame",
+    response_model=ObservationCommandFeedbackResponse,
+    responses={
+        400: {
+            "model": ObservationCommandFeedbackResponse,
+            "description": "Observation command rejected",
+        }
+    },
+)
+def save_last_frame(
+    request: Request,
+    observation_service: ObservationServiceDep,
+) -> ObservationCommandFeedbackResponse | JSONResponse:
+    """Persist the most recent completed frame.
+
+    Useful when the operator did not request saving at arm time: the frame is
+    still held in memory after readout and can be written to FITS + quicklook.
+    """
+    request_id = _request_id_from(request)
+    try:
+        result = observation_service.save_last_frame()
+    except ICSException as exc:
+        return _observation_exception_response(
+            command=ObservationCommandName.SAVE_LAST_FRAME,
+            exc=exc,
+            observation_service=observation_service,
+            request_id=request_id,
+        )
+
+    return _observation_command_response(
+        command=ObservationCommandName.SAVE_LAST_FRAME,
+        result=result,
+        observation_service=observation_service,
+        request_id=request_id,
+    )

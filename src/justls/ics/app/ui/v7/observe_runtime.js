@@ -11,6 +11,12 @@
   const FINISH_ENDPOINT = "/api/v1/observation/finish";
   const STOP_READOUT_ENDPOINT = "/api/v1/observation/stop_readout";
   const ABORT_DISCARD_ENDPOINT = "/api/v1/observation/abort_discard";
+  const SAVE_LAST_ENDPOINT = "/api/v1/observation/save_last_frame";
+  const OUTPUT_LOCATION_ENDPOINT = "/api/v1/system/output-location";
+  // Poll faster while a frame is being taken so the countdown and the
+  // automatic readout are visible without a manual refresh.
+  const ACTIVE_POLL_MS = 500;
+  const IDLE_POLL_MS = 5000;
 
   const runtime = window[GLOBAL_KEY] || {
     started: false,
@@ -23,6 +29,8 @@
     lastError: null,
     lastRequestId: null,
     localRefreshBound: false,
+    outputDir: "",
+    outputDirBound: false,
   };
   window[GLOBAL_KEY] = runtime;
 
@@ -44,6 +52,9 @@
       ["obs-start", () => postCommand("start", START_ENDPOINT)],
       ["obs-finish", () => postCommand("finish", FINISH_ENDPOINT)],
       ["obs-stop-readout", () => postCommand("stop_readout", STOP_READOUT_ENDPOINT)],
+      ["obs-save-last", () => postCommand("save_last_frame", SAVE_LAST_ENDPOINT)],
+      ["obs-set-output-dir", applyOutputLocation],
+      ["obs-reload-output-dir", loadOutputLocation],
       ["obs-abort-discard", abortDiscard],
     ];
 
@@ -109,8 +120,107 @@
     if (!control) return;
     control.disabled = runtime.busy || control.dataset.singleLocked === "true" || control.dataset.sequenceLocked === "true";
     const status = bind("v7.observe.save_status");
-    setText(status, control.checked ? "SAVING · FITS + quicklook to default location" : "NOT SAVING · frame remains in memory only");
+    const target = runtime.outputDir ? `to ${runtime.outputDir}` : "to the default location";
+    setText(status, control.checked ? `SAVING · FITS + quicklook ${target}` : "NOT SAVING · frame remains in memory only");
     if (status) status.className = control.checked ? "badge live" : "badge warn";
+  }
+
+  function renderOutputLocation(payload) {
+    const panel = ensurePanel();
+    const input = panel && panel.querySelector('[data-role="observe-output-dir"]');
+    const data = payload && typeof payload === "object" ? payload : {};
+    runtime.outputDir = data.data_root || "";
+    if (input && document.activeElement !== input) {
+      input.value = runtime.outputDir;
+    }
+    renderRecentRoots(data.recent_roots);
+
+    const status = bind("v7.observe.output_dir_status");
+    const label = runtime.outputDir
+      ? `${runtime.outputDir} · ${data.writable ? "writable" : "NOT writable"}${data.message ? ` · ${data.message}` : ""}`
+      : (data.message || "output directory not loaded");
+    setText(status, label);
+    if (status) status.className = runtime.outputDir && data.writable ? "badge live" : "badge warn";
+    refreshSaveControl();
+  }
+
+  function renderRecentRoots(recent) {
+    if (!Array.isArray(recent)) return;
+    const list = document.getElementById("justls-recent-roots");
+    if (!list) return;
+    // Datalist options have no usable diff, just rebuild cheaply.
+    list.replaceChildren();
+    recent.forEach((entry) => {
+      if (typeof entry !== "string" || !entry.trim()) return;
+      const option = document.createElement("option");
+      option.value = entry;
+      list.appendChild(option);
+    });
+  }
+
+  async function loadOutputLocation() {
+    const panel = ensurePanel();
+    const status = bind("v7.observe.output_dir_status");
+    try {
+      const response = await fetch(OUTPUT_LOCATION_ENDPOINT, {
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      });
+      const payload = await response.json();
+      if (response.ok) {
+        renderOutputLocation(payload);
+        return;
+      }
+      if (status) setText(status, `HTTP ${response.status}: ${JSON.stringify(payload)}`);
+    } catch (error) {
+      if (status) setText(status, error && error.message ? error.message : "output directory lookup failed");
+    }
+    if (panel) refreshSaveControl();
+  }
+
+  async function applyOutputLocation() {
+    if (runtime.busy) return;
+    const panel = ensurePanel();
+    const input = panel && panel.querySelector('[data-role="observe-output-dir"]');
+    const status = bind("v7.observe.output_dir_status");
+    const value = input ? String(input.value || "").trim() : "";
+
+    if (!value) {
+      if (status) {
+        setText(status, "enter an output directory first");
+        status.className = "badge warn";
+      }
+      return;
+    }
+
+    try {
+      const response = await fetch(OUTPUT_LOCATION_ENDPOINT, {
+        method: "PUT",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+        body: JSON.stringify({ data_root: value }),
+      });
+      const payload = await response.json();
+      if (response.ok) {
+        renderOutputLocation(payload);
+        return;
+      }
+      const message = payload && payload.detail && payload.detail.message
+        ? payload.detail.message
+        : JSON.stringify(payload);
+      if (status) {
+        setText(status, `rejected · ${message}`);
+        status.className = "badge warn";
+      }
+    } catch (error) {
+      if (status) {
+        setText(status, error && error.message ? error.message : "output directory update failed");
+        status.className = "badge warn";
+      }
+    }
   }
 
   function readArmPayload() {
@@ -351,6 +461,22 @@
     );
   }
 
+  function countdownLabel(state, meta, armed) {
+    if (state === "reading_out") return "reading out…";
+    if (state !== "exposing") return "not running";
+
+    const startedAt = meta && meta.started_at_utc ? Date.parse(meta.started_at_utc) : NaN;
+    const expTime = Number((armed && armed.exp_time_s) || (meta && meta.exp_time_s));
+    if (!Number.isFinite(startedAt) || !Number.isFinite(expTime) || expTime <= 0) {
+      return "exposing";
+    }
+
+    const elapsedS = (Date.now() - startedAt) / 1000;
+    const remaining = expTime - elapsedS;
+    if (remaining <= 0) return `exposing · readout imminent (${expTime.toFixed(1)} s)`;
+    return `exposing · ${remaining.toFixed(1)} s remaining of ${expTime.toFixed(1)} s`;
+  }
+
   function renderStatus(payload) {
     runtime.lastStatus = payload || {};
     const armed = runtime.lastStatus.armed_exposure || null;
@@ -367,6 +493,10 @@
     setText(
       bind("v7.observe.armed"),
       armed ? `${armed.frame_type || "frame"} - ${armed.exp_time_s || "?"} s` : "not armed",
+    );
+    setText(
+      bind("v7.observe.countdown"),
+      countdownLabel(state, runtime.lastStatus.observation_meta, armed),
     );
     setText(bind("v7.observe.record.id"), record ? record.record_id : "not available");
     setText(
@@ -467,7 +597,26 @@
     } finally {
       runtime.statusLoading = false;
       refreshRuntimeState();
+      scheduleNextPoll();
     }
+  }
+
+  function scheduleNextPoll() {
+    if (runtime.pollTimer) {
+      clearTimeout(runtime.pollTimer);
+      runtime.pollTimer = null;
+    }
+    if (!runtime.started) return;
+
+    const state = (runtime.lastStatus || {}).state || (runtime.lastStatus || {}).observation_state || "";
+    const active = state === "exposing" || state === "reading_out";
+    runtime.pollTimer = setTimeout(
+      () => {
+        runtime.pollTimer = null;
+        refreshStatus();
+      },
+      active ? ACTIVE_POLL_MS : IDLE_POLL_MS,
+    );
   }
 
   async function previewObservation() {
@@ -567,6 +716,11 @@
       window.addEventListener("justls:v7-save-lock", refreshSaveControl);
     }
     refreshSaveControl();
+
+    if (!runtime.outputDirBound) {
+      runtime.outputDirBound = true;
+      loadOutputLocation();
+    }
 
     if (!runtime.localRefreshBound) {
       runtime.localRefreshBound = true;

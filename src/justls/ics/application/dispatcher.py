@@ -3,7 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from justls.ics.kernel.errors import ErrorCode, ICSException, InvalidParamError, UnsupportedError
+from justls.ics.kernel.errors import ErrorCode, ICSException, InvalidParamError, UnsupportedError, DeviceFaultError
+from justls.ics.kernel.states import ExposureState
 from justls.ics.kernel.jobs import CommandRequest, JobRecord
 from justls.ics.kernel.runtime import Runtime
 
@@ -33,6 +34,11 @@ class CommandDispatcher:
         self._handlers[key] = handler
 
     def dispatch(self, request: CommandRequest) -> DispatchResult:
+        with self.runtime.sequence_lock:
+            self.runtime.require_open()
+            return self._dispatch_locked(request)
+
+    def _dispatch_locked(self, request: CommandRequest) -> DispatchResult:
         key = (request.subsystem, request.action)
         handler = self._handlers.get(key)
 
@@ -89,6 +95,19 @@ class CommandDispatcher:
                 )
 
             return DispatchResult(job=job, payload={"error": exc.to_dict()})
+
+        except Exception as exc:
+            # Native/IO errors must terminate the job and leave a recoverable
+            # failed state, rather than an untracked 500 and permanent readout.
+            error = DeviceFaultError(
+                f"{request.subsystem}.{request.action} failed: {type(exc).__name__}: {exc}",
+                subsystem=request.subsystem,
+            )
+            if request.subsystem == "detector" and self.runtime.detector is not None:
+                self.runtime.detector.mark_failed()
+                self.runtime.cancel_readout()
+            job = self.runtime.mark_job_failed(job.job_id, error, subsystem=tracked_subsystem)
+            return DispatchResult(job=job, payload={"error": error.to_dict()})
 
     def list_handlers(self) -> list[dict[str, str]]:
         return [

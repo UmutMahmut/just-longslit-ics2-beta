@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -14,19 +15,32 @@ from justls.ics.app.api.errors import build_api_error_detail
 from justls.ics.app.api.routers.cameras import router as cameras_router
 from justls.ics.app.api.routers.detector import router as detector_router
 from justls.ics.app.api.routers.health import router as health_router
+from justls.ics.app.api.routers.instrument import router as instrument_router
 from justls.ics.app.api.routers.lamps import router as lamps_router
 from justls.ics.app.api.routers.observatory import router as observatory_router
 from justls.ics.app.api.routers.observation import router as observation_router
 from justls.ics.app.api.routers.presets import router as presets_router
 from justls.ics.app.api.routers.setup import router as setup_router
 from justls.ics.app.api.routers.slit import router as slit_router
+from justls.ics.app.api.routers.system import router as system_router
 
 logger = logging.getLogger(__name__)
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    yield
+    # No-op unless a runtime was actually built; importing the app must stay
+    # free of hardware side effects.
+    from justls.ics.kernel.runtime import shutdown_runtime
+
+    shutdown_runtime()
+
 
 app = FastAPI(
     title="ICS Beta",
     version="0.1.0",
     description="Campus telescope camera and long-slit workflow integration branch.",
+    lifespan=lifespan,
 )
 
 
@@ -95,6 +109,7 @@ async def handle_unexpected_exception(
 
 app.include_router(health_router)
 app.include_router(setup_router)
+app.include_router(instrument_router)
 app.include_router(slit_router)
 app.include_router(lamps_router)
 app.include_router(observation_router)
@@ -102,6 +117,7 @@ app.include_router(observatory_router)
 app.include_router(detector_router)
 app.include_router(presets_router)
 app.include_router(cameras_router)
+app.include_router(system_router)
 
 UI_DIR = Path(__file__).resolve().parent / "ui"
 UI_ENTRY = UI_DIR / "ui_alpha_skeleton_v5.html"

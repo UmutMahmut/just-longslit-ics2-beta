@@ -62,6 +62,10 @@ def test_v7_runtime_assets_have_expected_panel_markers():
     assert "data-guard-available" in guard.text
     assert "fetch(" not in guard.text
     assert "new XMLHttpRequest" not in guard.text
+    # A discarded/aborted exposure leaves the detector idle; the guard must let
+    # the operator arm again, otherwise one abort locks the panel forever.
+    assert 'name.includes("discard")' in guard.text
+    assert 'name.includes("abort")' in guard.text
 
 
 def test_v7_status_runtime_is_singleton_safe():

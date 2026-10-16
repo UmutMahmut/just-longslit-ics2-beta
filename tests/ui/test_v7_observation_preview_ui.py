@@ -26,7 +26,9 @@ def test_v7_observe_static_shell_exposes_preview_panel() -> None:
     assert 'data-bind="v7.observe.preview.calibration_state"' in html
     assert 'data-bind="v7.observe.preview.issues"' in html
     assert "Check Readiness" in html
-    assert "the science acquisition path has no separate Preview lifecycle." in html
+    # The exposure is read out automatically when its timer expires; Preview
+    # readiness stays an advisory, independent lifecycle check.
+    assert "read out automatically when the timer expires" in html
 
 
 def test_v7_observe_runtime_asset_binds_preview_endpoint_and_current_api_shape() -> None:

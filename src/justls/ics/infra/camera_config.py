@@ -29,6 +29,8 @@ class CameraDeviceConfig(BaseModel):
     height: int = Field(default=480, ge=16)
     bit_depth: Literal[8, 10, 12, 14, 16] = 16
     gain: float = Field(default=100.0, ge=0)
+    offset: int = Field(default=30, ge=0)
+    binning: int = Field(default=1, ge=1, le=4)
     preview_exposure_ms: float = Field(default=100.0, gt=0)
 
 
@@ -237,8 +239,20 @@ def load_camera_system_config(
 
 
 def resolve_data_root(config: CameraSystemConfig, config_path: Path) -> Path:
+    # Precedence: environment override > operator selection made through the
+    # UI/API (persisted) > the value compiled into the camera configuration.
     env_root = os.getenv(DATA_ROOT_ENV)
-    raw_root = env_root.strip() if env_root and env_root.strip() else config.data_root
+    if env_root and env_root.strip():
+        raw_root = env_root.strip()
+    else:
+        from justls.ics.infra.output_location import (
+            get_output_location_path,
+            load_output_location,
+        )
+
+        raw_root = (
+            load_output_location(get_output_location_path()) or config.data_root
+        )
     root = Path(raw_root).expanduser()
     if root.is_absolute():
         return root.resolve()

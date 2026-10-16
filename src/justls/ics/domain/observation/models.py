@@ -780,6 +780,7 @@ class ObservationCommandName(str, Enum):
     FINISH = "finish"
     STOP_READOUT = "stop_readout"
     ABORT_DISCARD = "abort_discard"
+    SAVE_LAST_FRAME = "save_last_frame"
 
 
 class ObservationCommandStatus(str, Enum):

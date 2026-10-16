@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from datetime import datetime, timezone
 from threading import RLock
 from typing import Any
@@ -8,6 +9,7 @@ from uuid import uuid4
 import numpy as np
 
 from justls.ics.domain.detector.frame import DetectorFrameMetadata
+from justls.ics.kernel.errors import InvalidStateError, UnsupportedError
 from justls.ics.infra.camera_config import CameraDeviceConfig
 from justls.ics.drivers.zwo.sdk import (
     ASI_COOLER_ON,
@@ -63,8 +65,12 @@ class ZwoDetectorDriver:
         self._session: ZwoCameraSession | None = None
         self.detected_serial: str | None = None
         self._active: dict[str, Any] | None = None
+        self._exposure_deadline = 0.0
         self._latest_image: np.ndarray | None = None
         self._latest_capture: dict[str, Any] | None = None
+        # Last trustworthy temperature reading, for stale/invalid semantics.
+        self._last_temperature_c: float | None = None
+        self._last_temperature_at: float | None = None
 
     def connect(self) -> None:
         with self._lock:
@@ -146,6 +152,7 @@ class ZwoDetectorDriver:
                 "started_at": utc_now_iso(),
             }
             session.start_exposure(dark=frame_type.strip().lower() == "dark")
+            self._exposure_deadline = time.monotonic() + active["actual_exp_time_s"]
             self._active = active
             return {
                 **active,
@@ -163,17 +170,27 @@ class ZwoDetectorDriver:
                 raise RuntimeError(f"ZWO exposure ended with status={status!r}")
             return self._readout(early_stop=False)
 
-    def stop_exposure_and_readout(self) -> dict[str, Any]:
+    def ensure_readout_ready(self) -> None:
+        """Reject premature Finish without blocking Abort for a long integration."""
         with self._lock:
             self._require_active()
-            session = self._require_session()
-            session.stop_exposure()
-            if session.exposure_status() != "success":
-                self._active = None
-                raise RuntimeError(
-                    "the ZWO SDK did not retain a readable frame after early stop"
+            if time.monotonic() < self._exposure_deadline - 0.1:
+                raise InvalidStateError(
+                    "Exposure is still integrating; wait for automatic readout or use Abort.",
+                    subsystem="detector",
                 )
-            return self._readout(early_stop=True)
+
+    def stop_exposure_and_readout(self) -> dict[str, Any]:
+        self.ensure_early_readout_supported()
+
+    def ensure_early_readout_supported(self) -> None:
+        # Snap-mode Stop has no verified retained-image contract. Do not
+        # destroy an integration in an attempt to implement Stop & Readout.
+        raise UnsupportedError(
+            "Retained early readout is not supported by this ZWO snap adapter; "
+            "wait for normal readout or use Abort to discard the exposure.",
+            subsystem="detector",
+        )
 
     def _readout(self, *, early_stop: bool) -> dict[str, Any]:
         active = self._require_active()
@@ -250,13 +267,53 @@ class ZwoDetectorDriver:
             return self.cooling_status()
 
     def cooling_status(self) -> dict[str, Any]:
+        """Cooler telemetry with explicit validity semantics.
+
+        ``temperature_state`` is one of:
+
+        - ``"stable"``  — fresh, trustworthy reading from the sensor;
+        - ``"stale"``   — the current read failed or is untrustworthy, so the
+          last trustworthy reading is reported instead;
+        - ``"invalid"`` — no trustworthy reading exists at all
+          (``detector_temperature_c`` is then ``None`` and must not be
+          written into FITS as if it were a measurement).
+
+        An exact 0.0 C raw reading is treated as untrustworthy: that is what
+        the ASI294MC Pro reports when its 12 V cooler supply is unplugged
+        (verified on the bench 2026-10-08; a companion camera read a sane
+        room temperature at the same time).
+        """
         session = self._require_session()
-        temperature_raw, _ = session.control_value(ASI_TEMPERATURE)
+        temperature_c: float | None = None
+        try:
+            temperature_raw, _ = session.control_value(ASI_TEMPERATURE)
+            if temperature_raw != 0:
+                temperature_c = temperature_raw / 10.0
+        except Exception:
+            temperature_c = None
+
+        now = time.monotonic()
+        if temperature_c is not None:
+            self._last_temperature_c = temperature_c
+            self._last_temperature_at = now
+            temperature_state = "stable"
+        elif self._last_temperature_c is not None:
+            temperature_c = self._last_temperature_c
+            temperature_state = "stale"
+        else:
+            temperature_state = "invalid"
+
         target, _ = session.control_value(ASI_TARGET_TEMPERATURE)
         enabled, _ = session.control_value(ASI_COOLER_ON)
         power, _ = session.control_value(ASI_COOLER_POWER_PERCENT)
         return {
-            "detector_temperature_c": temperature_raw / 10.0,
+            "detector_temperature_c": temperature_c,
+            "temperature_state": temperature_state,
+            "temperature_age_s": (
+                None
+                if self._last_temperature_at is None
+                else round(now - self._last_temperature_at, 3)
+            ),
             "cooler_target_c": float(target),
             "cooler_enabled": bool(enabled),
             "cooler_power_pct": float(power),
@@ -271,11 +328,18 @@ class ZwoDetectorDriver:
     def get_status(self) -> dict[str, Any]:
         with self._lock:
             session = self._session
-            exposure_state = (
-                session.exposure_status()
-                if session is not None and self._active is not None
-                else "idle"
-            )
+            error = None
+            cooling = None
+            exposure_state = "idle"
+            if session is not None:
+                try:
+                    if self._active is not None:
+                        exposure_state = session.exposure_status()
+                    if self.descriptor.cooler:
+                        cooling = self.cooling_status()
+                except Exception as exc:
+                    error = f"{type(exc).__name__}: {exc}"
+                    exposure_state = "unavailable"
             return {
                 "device_id": self.config.device_id,
                 "role": "science",
@@ -283,16 +347,23 @@ class ZwoDetectorDriver:
                 "model": self.descriptor.name,
                 "serial": self.detected_serial or self.config.serial,
                 "state": exposure_state,
-                "connected": session is not None,
+                "connected": session is not None and error is None,
+                "error": error,
                 "active_exposure": dict(self._active) if self._active else None,
                 "latest_capture": dict(self._latest_capture)
                 if self._latest_capture
                 else None,
-                "cooling": self.cooling_status() if session is not None else None,
+                "cooling": cooling,
             }
 
     def _frame_metadata(self) -> DetectorFrameMetadata:
         cooling = self.cooling_status() if self.descriptor.cooler else {}
+        # Telemetry-only diagnostics that do not belong in the FITS contract.
+        cooling.pop("temperature_age_s", None)
+        if cooling.get("temperature_state") == "invalid":
+            # Never write an untrustworthy reading (e.g. 0.0 C with the 12 V
+            # cooler supply unplugged) into CCD-TEMP as if it were real.
+            cooling["detector_temperature_c"] = None
         return DetectorFrameMetadata(
             manufacturer=self.config.manufacturer or "ZWO",
             model=self.descriptor.name,

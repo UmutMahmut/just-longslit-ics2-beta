@@ -146,7 +146,10 @@ def test_v7_static_observe_page_has_single_runtime_enhanceable_skeleton():
     assert 'data-bind="v7.sequence.reservation"' in response.text
     assert 'data-bind="v7.sequence.latest_job"' in response.text
     assert 'data-bind="v7.sequence.last_error"' in response.text
-    assert "does not schedule timer-based completion" in response.text
+    assert "read out automatically when the timer expires" in response.text
+    assert 'data-action="obs-save-last"' in response.text
+    assert 'data-bind="v7.observe.countdown"' in response.text
+    assert 'data-bind="v7.observe.save_status"' in response.text
     assert "Phase 3.0-B Lite operator workflow" in response.text
     assert "Durable sequence recovery active" in response.text
     assert "Buttons are static until Phase 2.8-F binding" not in response.text
@@ -177,7 +180,7 @@ def test_v7_observe_shell_preserves_compact_slit_over_bgr_camera_layout():
     assert "Beta: one shared science-camera source feeds B/G/R" in html
     assert "B/G/R layout remains ready for three independent science cameras" in html
     assert 'data-role="science-latest-image"' not in html
-    assert "the science acquisition path has no separate Preview lifecycle." in html
+    assert "read out automatically when the timer expires" in html
 
 def test_v7_default_shell_exposes_unified_command_feedback_static_bindings():
     client = TestClient(app)

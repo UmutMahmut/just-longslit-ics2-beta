@@ -120,6 +120,7 @@ def build_science_fits_cards(
     finished_at: str,
     simulated: bool,
     detector_metadata: DetectorFrameMetadata | dict[str, Any] | None = None,
+    instrument_cards: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     normalized_frame_type = frame_type.strip().lower()
     if normalized_frame_type not in SUPPORTED_FRAME_TYPES:
@@ -150,6 +151,10 @@ def build_science_fits_cards(
     }
     if metadata is not None:
         cards.update(metadata.to_fits_cards())
+    if instrument_cards:
+        # Operator-declared telescope/spectrograph state (attended
+        # declaration); provenance *SRC cards travel with the values.
+        cards.update(instrument_cards)
     return {key: value for key, value in cards.items() if value is not None}
 
 
@@ -241,8 +246,26 @@ def _publish_pair_no_overwrite(
 
 
 class LocalDataProductWriter:
-    def __init__(self, data_root: Path) -> None:
+    def __init__(
+        self,
+        data_root: Path,
+        *,
+        instrument_cards_provider: Any | None = None,
+    ) -> None:
         self.data_root = data_root.resolve()
+        # Zero-argument callable returning extra FITS cards (e.g. the
+        # operator-declared instrument context), evaluated per write so a
+        # mid-session declaration change lands on the next frame.
+        self._instrument_cards_provider = instrument_cards_provider
+
+    def set_data_root(self, data_root: str | Path) -> Path:
+        """Point subsequent writes at a new root (operator-selected folder).
+
+        Frames already written stay where they are; this only changes where the
+        *next* frame is published. Returns the resolved root.
+        """
+        self.data_root = Path(data_root).expanduser().resolve()
+        return self.data_root
 
     def write(
         self,
@@ -295,6 +318,11 @@ class LocalDataProductWriter:
             finished_at=finished_at,
             simulated=simulated,
             detector_metadata=metadata,
+            instrument_cards=(
+                self._instrument_cards_provider()
+                if self._instrument_cards_provider is not None
+                else None
+            ),
         )
         fits_bytes = build_fits_bytes(image, fits_header_cards)
         quicklook_bytes = render_quicklook_png(image)

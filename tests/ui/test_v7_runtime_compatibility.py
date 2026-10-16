@@ -111,7 +111,14 @@ def test_v7_instrument_runtime_preserves_p0_slit_unit_contract():
 
     assert response.status_code == 200
     js = response.text
-    assert "SLIT_UM_PER_ARCSEC = 128.34" in js
+    # Plate scale must be derived from the telescope focal length, not the
+    # hardcoded JUST-only constant 128.34 (wrong by >5x on other platforms).
+    assert "SLIT_UM_PER_ARCSEC = 128.34" not in js
+    assert "= 128.34" not in js
+    assert 'value="128.34"' not in js
+    assert "ARCSEC_PER_RADIAN = 206265" in js
+    assert "telescope_focal_length_mm" in js
+    assert "SLIT_UM_PER_ARCSEC = (TELESCOPE_FOCAL_LENGTH_MM * 1000) / ARCSEC_PER_RADIAN" in js
     assert "COMMON_SLIT_WIDTH_ARCSEC = [1.0, 1.5, 2.0, 3.0]" in js
     assert "instrument-slit-width-arcsec" in js
     assert "instrument-slit-width-um" in js

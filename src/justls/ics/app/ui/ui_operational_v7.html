@@ -135,9 +135,26 @@
     .badge.demo { color: var(--warn); border-color: #dab36f; background: #fff4dc; }
     .badge.future { color: var(--muted); }
     .badge.warn { color: var(--danger); border-color: #dc9b9b; background: #fff0f0; }
+    .banner-warn { background: #fff5f5; border-bottom: 2px solid #d9534f; color: #7a1f1f; padding: 12px 18px; font-size: 13px; line-height: 1.5; }
+    .banner-warn strong { color: #7a1f1f; }
+    .banner-warn[hidden] { display: none; }
+    .camera-hot-plug { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; font-size: 12px; color: var(--muted); }
+    .camera-hot-plug .badge { font-weight: 600; }
+    .camera-hot-plug .badge.live { background: #e7f3ec; border-color: #5a9e74; color: #2f6b48; }
+    .camera-hot-plug .badge.warn { background: #fff5d8; border-color: #d4a72c; color: #6a4a0d; }
+    .camera-hot-plug .badge.error { background: #fdecea; border-color: #d96a5a; color: #7a1f1f; }
+    .camera-hot-plug .badge.idle { background: #eceff3; border-color: #b0b8c2; color: #4a5260; }
+    .btn.small { padding: 2px 8px; font-size: 12px; }
 
     .mode-switch { display: flex; gap: 6px; border-bottom: 1px solid var(--border-soft); padding-bottom: 8px; }
     .mode-switch .btn[aria-selected="true"] { background: #dceafe; border-color: #5579ad; font-weight: 760; }
+    .save-decision { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid var(--border-soft); border-left: 4px solid #b45309; border-radius: 6px; background: #fffbeb; }
+    .save-decision-toggle { display: flex; align-items: flex-start; gap: 9px; font-size: 13px; line-height: 1.5; }
+    .save-decision-toggle input[type="checkbox"] { width: 17px; height: 17px; margin: 1px 0 0; flex: none; }
+    .save-decision .badge.live { background: #dcfce7; border-color: #86b7a1; color: #166534; }
+    .save-decision .badge.warn { background: #fef3c7; border-color: #d9a63a; color: #92400e; }
+    .output-location { display: grid; gap: 8px; padding: 9px 11px; border: 1px solid var(--border-soft); border-left: 4px solid #1d4ed8; border-radius: 6px; background: #eff6ff; }
+    .output-location input[type="text"] { width: 100%; font-family: var(--mono, monospace); font-size: 12px; }
 
     .live-preview { position: relative; min-height: 340px; border: 1px solid #7f8da3; background: radial-gradient(circle at 52% 38%, rgba(255,255,255,0.9), rgba(255,255,255,0.05) 8%, transparent 18%), radial-gradient(circle at 38% 55%, rgba(125,171,222,0.45), transparent 16%), radial-gradient(circle at 64% 62%, rgba(55,91,143,0.35), transparent 20%), linear-gradient(180deg, #0b1220, #1f2937 55%, #111827); overflow: hidden; }
     .live-preview::before { content: ""; position: absolute; inset: 0; background-image: linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px); background-size: 32px 32px; opacity: 0.36; }
@@ -248,6 +265,10 @@
 </head>
 <body>
   <div class="console">
+    <div id="v7-safe-mode-banner" class="banner-warn" hidden data-role="v7.safe_mode_banner">
+      <strong>HARDWARE OFFLINE · SAFE MODE</strong>
+      <span data-bind="v7.safe_mode_detail">ICS_BETA_FORCE_SIM=1; the ZWO SDK has been skipped to keep the service usable. All science frames are simulated; restart without this flag once the USB stack is healthy.</span>
+    </div>
     <header class="topbar">
       <div class="brand">
         <div class="subtitle">JUST Telescope · Long-Slit Spectrograph · ICS 2.0</div>
@@ -430,7 +451,7 @@
                     <div class="panel-body">
                       <div class="field-grid">
                         <label>Width (arcsec)<input type="number" min="0.001" step="0.001" value="1.0" data-role="instrument-slit-width-arcsec" /></label>
-                        <label>Width (um)<input type="number" min="0.001" step="0.001" value="128.34" data-role="instrument-slit-width-um" /></label>
+                        <label>Width (um)<input type="number" min="0.001" step="0.001" value="24.24" data-role="instrument-slit-width-um" /></label>
                         <label>Angle (deg)<input type="number" min="-90" max="90" step="0.001" value="0" data-role="instrument-slit-angle-deg" /></label>
                         <button class="btn primary" type="button" data-action="instrument-set-slit-width" disabled>Set Width</button>
                         <button class="btn" type="button" data-action="instrument-set-slit-angle" disabled>Set Angle</button>
@@ -438,7 +459,7 @@
                       <dl class="kv compact-kv" style="margin-top: 8px;">
                         <dt>Current Width</dt><dd><code data-bind="v7.instrument.slit.width_current">not connected</code></dd>
                         <dt>Current Angle</dt><dd><code data-bind="v7.instrument.slit.angle_current">not connected</code></dd>
-                        <dt>Conversion</dt><dd><code>1 arcsec = <span data-bind="v7.instrument.slit.conversion_um_per_arcsec">128.34</span> um</code></dd>
+                        <dt>Conversion</dt><dd><code>1 arcsec = <span data-bind="v7.instrument.slit.conversion_um_per_arcsec">24.24</span> um</code></dd>
                       </dl>
                       <div class="badge-row" data-role="instrument-slit-shortcuts" aria-label="common slit width shortcuts" style="margin-top: 8px;">
                         <button class="btn" type="button" data-role="instrument-slit-shortcut" data-arcsec="1.0" disabled>1.0"</button>
@@ -576,6 +597,10 @@
                     <label><input type="checkbox" data-role="slit-preview-enabled" checked /> Keep Preview Running</label>
                     <span>State <code data-bind="v7.camera.slit.state">initializing</code></span>
                     <span>Frames <code data-bind="v7.camera.slit.sequence">not available</code></span>
+                    <span class="camera-hot-plug" data-role="v7-camera-hot-plug">
+                      <span class="badge" data-bind="v7.camera.hot_plug.status">USB monitor: initialising</span>
+                      <button class="btn small" type="button" data-action="v7-reload-cameras" data-role="v7-reload-cameras" title="Release all camera handles and re-bind (use after a USB change)">Reload Cameras</button>
+                    </span>
                   </div>
                 </section>
 
@@ -610,11 +635,26 @@
                   <button class="btn" type="button" role="tab" aria-selected="true" data-action="observe-mode-single">Single Exposure</button>
                   <button class="btn" type="button" role="tab" aria-selected="false" data-action="observe-mode-sequence">Sequence</button>
                 </div>
-                <label><input type="checkbox" data-role="observe-save-products" /> Save FITS + Quicklook</label>
-                <span class="badge warn" data-bind="v7.observe.save_status">NOT SAVING · frame remains in memory only</span>
+                <div class="save-decision" role="group" aria-label="science frame saving">
+                  <label class="save-decision-toggle">
+                    <input type="checkbox" data-role="observe-save-products" />
+                    <span><strong>Save science frames to disk</strong> — writes FITS + quicklook at readout. Unticked frames stay in memory and can still be saved afterwards with <em>Save Last Frame</em>.</span>
+                  </label>
+                  <span class="badge warn" data-bind="v7.observe.save_status">NOT SAVING · frame remains in memory only</span>
+                </div>
+                <div class="output-location" role="group" aria-label="output directory">
+                  <label style="grid-column: 1 / -1;">Output Directory<input type="text" data-role="observe-output-dir" list="justls-recent-roots" placeholder="e.g. D:\observations\20261014 or /data/observations" spellcheck="false" autocomplete="off" /><datalist id="justls-recent-roots"></datalist></label>
+                  <div class="badge-row">
+                    <button class="btn" type="button" data-action="obs-set-output-dir">Apply Directory</button>
+                    <button class="btn" type="button" data-action="obs-reload-output-dir">Reload</button>
+                  </div>
+                  <p style="margin: 6px 0 0; color: var(--muted); font-size: 11px;">Frames are written to <code>&lt;directory&gt;/YYYYMMDD/&lt;obs-id&gt;/</code>. The directory is created if missing and the choice is remembered for the next start. A running exposure is never affected.</p>
+                  <span class="badge" data-bind="v7.observe.output_dir_status">output directory not loaded</span>
+                </div>
                 <dl class="kv">
                   <dt>Observation State</dt><dd><code data-bind="v7.observe.state">ready_to_arm</code></dd>
                   <dt>Armed Exposure</dt><dd><code data-bind="v7.observe.armed">not armed</code></dd>
+                  <dt>Exposure Progress</dt><dd><code data-bind="v7.observe.countdown">not running</code></dd>
                   <dt>Last Command</dt><dd><code data-bind="v7.observe.last_command">none</code></dd>
                   <dt>Request ID</dt><dd><code data-bind="v7.observe.request_id">not available</code></dd>
                   <dt>Latest Job</dt><dd><code data-bind="v7.observe.latest_job">not available</code></dd>
@@ -636,10 +676,11 @@
                     <button class="btn primary" type="button" data-action="obs-start" disabled>Start</button>
                     <button class="btn" type="button" data-action="obs-finish" disabled>Finish</button>
                     <button class="btn" type="button" data-action="obs-stop-readout" disabled>Stop & Readout</button>
+                    <button class="btn" type="button" data-action="obs-save-last" disabled>Save Last Frame</button>
                     <button class="btn danger" type="button" data-action="obs-abort-discard" disabled>Abort & Discard</button>
                   </div>
                   <label style="margin-top: 8px;"><input type="checkbox" data-role="obs-abort-confirm" /> Enable abort/discard command</label>
-                  <p style="margin: 8px 0 0; color: var(--muted); font-size: 12px;">Start does not schedule timer-based completion in this transition. Use Finish or Stop &amp; Readout; the science acquisition path has no separate Preview lifecycle.</p>
+                  <p style="margin: 8px 0 0; color: var(--muted); font-size: 12px;">Start begins a real exposure that is read out automatically when the timer expires; Finish/Stop &amp; Readout complete it early. Frames taken without "Save" ticked stay in memory and can be written with Save Last Frame.</p>
                   <section class="subpanel" data-role="v7-observe-preview-panel">
                     <h3>Readiness / Validation</h3>
                     <dl class="kv">

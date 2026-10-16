@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import ctypes
 import os
+import threading
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
+from justls.ics.drivers.zwo.native_calls import GuardedLibrary, NativeCallGate, shared_gate
 
 
 ASI_SUCCESS = 0
@@ -189,18 +191,95 @@ class ZwoSdkError(RuntimeError):
         )
 
 
+class ZwoSdkLibraryLoadError(RuntimeError):
+    """The vendor library itself (or one of its dependencies) failed to load."""
+
+
+class ZwoCameraTopologyChangedError(ZwoSdkError):
+    """A camera was connected/removed while enumeration was in progress.
+
+    The ZWO SDK indexes cameras by hotplug order; calling it with a stale
+    index after a topology change can crash the process outright, so the
+    binding re-checks the camera count and raises this structured error
+    instead. Callers should re-run discovery before retrying.
+    """
+
+    def __init__(
+        self,
+        operation: str,
+        *,
+        expected_count: int,
+        actual_count: int,
+    ) -> None:
+        self.expected_count = int(expected_count)
+        self.actual_count = int(actual_count)
+        super().__init__(operation, 1)  # ASI_ERROR_INVALID_INDEX
+        self.args = (
+            f"{operation} aborted: camera topology changed during discovery "
+            f"(expected {self.expected_count}, now {self.actual_count}). "
+            "Re-run discovery before retrying.",
+        )
+
+
+# Enumeration calls share one lock process-wide: the vendor library crashes
+# (access violation, not a catchable error) if topology queries race each
+# other or run against a stale device list. Per-camera session calls use
+# distinct camera IDs and are left unlocked so two cameras can expose in
+# parallel.
+_ENUMERATION_LOCK = threading.RLock()
+
+
+def _load_library(dll_path: Path) -> Any:
+    """Load ASICamera2 with its dependency directory registered.
+
+    On Windows the vendor DLL depends on sibling DLLs that are only found if
+    the containing directory is on the DLL search path. ``ctypes.WinDLL``
+    alone fails (or worse, loads but crashes later) when ASI Studio is not on
+    PATH, so we register the directory explicitly.
+    """
+    if not dll_path.is_file():
+        raise ZwoSdkLibraryLoadError(
+            "ZWO SDK library not found: "
+            f"{dll_path}\n"
+            "Install ZWO ASI Studio (or the ASI Camera SDK) and point "
+            "ICS_ZWO_SDK_LIBRARY at ASICamera2.dll, e.g. "
+            r"C:\Program Files\ASIStudio\ASICamera2.dll"
+        )
+    dll_dir_handle: Any | None = None
+    if os.name == "nt" and hasattr(os, "add_dll_directory"):
+        try:
+            dll_dir_handle = os.add_dll_directory(str(dll_path.parent))
+        except OSError:
+            dll_dir_handle = None
+    loader = ctypes.WinDLL if os.name == "nt" else ctypes.CDLL
+    try:
+        library = loader(str(dll_path))
+    except OSError as exc:
+        raise ZwoSdkLibraryLoadError(
+            f"ZWO SDK library failed to load: {dll_path}\n"
+            f"OS error: {exc}\n"
+            "On Windows this is almost always a missing dependency of "
+            "ASICamera2.dll. Install/repair ZWO ASI Studio and the ZWO USB "
+            "camera driver, and make sure the DLL directory is reachable "
+            "(it was registered via os.add_dll_directory before loading)."
+        ) from exc
+    return library, dll_dir_handle
+
+
 class ZwoSdk:
     """Minimal read-only discovery binding for ASICamera2.dll."""
 
     def __init__(self, dll_path: str | Path, *, library: Any | None = None) -> None:
         self.dll_path = Path(dll_path).expanduser().resolve()
+        real_library = library is None
+        self._dll_dir_handle: Any | None = None
         if library is None:
-            if not self.dll_path.is_file():
-                raise FileNotFoundError(f"ZWO SDK library not found: {self.dll_path}")
-            loader = ctypes.WinDLL if os.name == "nt" else ctypes.CDLL
-            library = loader(str(self.dll_path))
+            library, self._dll_dir_handle = _load_library(self.dll_path)
         self._library = library
         self._configure_signatures()
+        gate = shared_gate(os.path.normcase(str(self.dll_path))) if real_library else NativeCallGate()
+        self._library = GuardedLibrary(self._library, gate)
+        self.serial_by_camera_id: dict[int, str] = {}
 
     def _configure_signatures(self) -> None:
         self._library.ASIGetSDKVersion.argtypes = []
@@ -279,17 +358,41 @@ class ZwoSdk:
         return bytes(raw).decode("ascii", errors="replace").strip()
 
     def connected_camera_count(self) -> int:
-        return int(self._library.ASIGetNumOfConnectedCameras())
+        with _ENUMERATION_LOCK:
+            return int(self._library.ASIGetNumOfConnectedCameras())
 
     def discover(self) -> tuple[ZwoCameraDescriptor, ...]:
-        descriptors: list[ZwoCameraDescriptor] = []
-        for index in range(self.connected_camera_count()):
-            info = AsiCameraInfo()
-            code = int(self._library.ASIGetCameraProperty(ctypes.byref(info), index))
-            if code != ASI_SUCCESS:
-                raise ZwoSdkError(f"ASIGetCameraProperty(index={index})", code)
-            descriptors.append(self._descriptor_from_info(index, info))
-        return tuple(descriptors)
+        with _ENUMERATION_LOCK:
+            count = self.connected_camera_count()
+            descriptors: list[ZwoCameraDescriptor] = []
+            for index in range(count):
+                # A hotplug between the count query and this property query
+                # would hand the vendor library a stale index and can crash
+                # the process; re-check before every call instead.
+                current = self.connected_camera_count()
+                if current != count:
+                    raise ZwoCameraTopologyChangedError(
+                        f"discover(index={index})",
+                        expected_count=count,
+                        actual_count=current,
+                    )
+                info = AsiCameraInfo()
+                code = int(
+                    self._library.ASIGetCameraProperty(ctypes.byref(info), index)
+                )
+                if code != ASI_SUCCESS:
+                    recheck = self.connected_camera_count()
+                    if recheck != count:
+                        raise ZwoCameraTopologyChangedError(
+                            f"ASIGetCameraProperty(index={index})",
+                            expected_count=count,
+                            actual_count=recheck,
+                        )
+                    raise ZwoSdkError(
+                        f"ASIGetCameraProperty(index={index})", code
+                    )
+                descriptors.append(self._descriptor_from_info(index, info))
+            return tuple(descriptors)
 
     def open_camera(self, camera_id: int) -> "ZwoCameraSession":
         """Open and initialize a camera; callers must use the returned context."""

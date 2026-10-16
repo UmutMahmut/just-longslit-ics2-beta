@@ -46,10 +46,13 @@ class SequenceCommandResult:
 class ObservationSequenceService:
     """Audited, in-memory coordinator over the existing single-exposure path.
 
-    The service deliberately does not create a timer thread or bypass the
-    detector command lifecycle. Each sequence step is armed, started, and
-    completed through ObservationService, so the existing readiness gate and
-    ExposureRecord contract remain authoritative.
+    Each sequence step is armed, started, and completed through
+    ObservationService, so the existing readiness gate and ExposureRecord
+    contract remain authoritative.
+
+    A step is read out automatically once its requested integration time has
+    elapsed (hardware exposures cannot wait for an operator to click
+    "finish"); the operator still starts the next step explicitly.
     """
 
     def __init__(
@@ -183,6 +186,7 @@ class ObservationSequenceService:
         self.runtime.mark_job_running(job.job_id)
 
         try:
+            self.runtime.require_open()
             if self.runtime.sequence_persistence_error is not None:
                 raise InvalidStateError(
                     "Sequence persistence is unavailable; observation commands are blocked.",
@@ -195,6 +199,23 @@ class ObservationSequenceService:
             snapshot = action()
             self._persist(snapshot)
         except ICSException as exc:
+            if (self.runtime.detector is not None
+                    and self.runtime.detector.state.value == "failed"
+                    and self.runtime.sequence_execution is not None
+                    and self.runtime.sequence_execution.state.value not in {"completed", "aborted", "failed"}):
+                snapshot = self.runtime.sequence_execution
+                snapshot.state = SequenceExecutionState.RECOVERY_REQUIRED
+                snapshot.active_exposure = False
+                snapshot.recovery = SequenceRecoveryInfo(
+                    reason="acquisition_failure",
+                    interrupted_state="running",
+                    interrupted_index=snapshot.current_index,
+                    file_issues=[str(exc)],
+                    retry_allowed=False,
+                    allowed_actions=[SequenceRecoveryAction.ABORT, SequenceRecoveryAction.MARK_FAILED],
+                )
+                snapshot.message = "Acquisition failed; review data and hardware before recovery."
+                self._persist(snapshot)
             job = self.runtime.mark_job_rejected(job.job_id, exc)
             return SequenceCommandResult(
                 command=command,
@@ -427,6 +448,11 @@ class ObservationSequenceService:
         snapshot.message = (
             f"Exposure {snapshot.current_index + 1}/{snapshot.total_steps} is running."
         )
+        self.runtime.schedule_readout(
+            duration_s=float(exposure.exp_time_s),
+            callback=self.finish_step,
+            description=f"sequence-step-{snapshot.current_index + 1}",
+        )
         return snapshot
 
     def _finish_step(self) -> SequenceExecutionSnapshot:
@@ -545,6 +571,9 @@ class ObservationSequenceService:
                 subsystem="observation_sequence",
                 details={"state": snapshot.state.value},
             )
+
+        # Stop any pending automatic readout: the step is being abandoned.
+        self.runtime.cancel_readout()
 
         if snapshot.active_exposure:
             result = self.observation_service.abort_discard(sequence_owned=True)

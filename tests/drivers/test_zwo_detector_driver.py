@@ -154,3 +154,74 @@ def test_connect_refuses_serial_mismatch() -> None:
         driver.connect()
 
     assert session.closed is True
+
+
+def _connected_driver(session: FakeZwoSession) -> ZwoDetectorDriver:
+    driver = ZwoDetectorDriver(
+        FakeZwoSdk(session),  # type: ignore[arg-type]
+        descriptor(),
+        camera_config(),
+        gain=0,
+        offset=30,
+    )
+    driver.connect()
+    return driver
+
+
+def test_zero_temperature_reading_is_invalid_not_a_measurement() -> None:
+    # Bench reality 2026-10-08: ASI294MC Pro with its 12 V cooler supply
+    # unplugged reports TEMPERATURE raw=0 (0.0 C).
+    session = FakeZwoSession()
+    session.controls[8] = 0
+    driver = _connected_driver(session)
+    try:
+        status = driver.cooling_status()
+        assert status["temperature_state"] == "invalid"
+        assert status["detector_temperature_c"] is None
+
+        metadata = driver._frame_metadata()
+        assert metadata.temperature_state == "invalid"
+        assert metadata.detector_temperature_c is None
+        cards = {k: v for k, v in metadata.to_fits_cards().items() if v is not None}
+        assert "CCD-TEMP" not in cards
+        assert cards["TEMPSTAT"] == "invalid"
+    finally:
+        driver.disconnect()
+
+
+def test_temperature_reading_recovers_to_stale_after_valid_read() -> None:
+    session = FakeZwoSession()
+    session.controls[8] = 123  # 12.3 C
+    driver = _connected_driver(session)
+    try:
+        assert driver.cooling_status()["temperature_state"] == "stable"
+
+        session.controls[8] = 0  # sensor supply lost mid-session
+        status = driver.cooling_status()
+        assert status["temperature_state"] == "stale"
+        assert status["detector_temperature_c"] == 12.3
+        assert status["temperature_age_s"] is not None
+    finally:
+        driver.disconnect()
+
+
+def test_temperature_read_failure_uses_cache_then_invalid() -> None:
+    session = FakeZwoSession()
+    session.controls[8] = 123
+    driver = _connected_driver(session)
+    try:
+        assert driver.cooling_status()["temperature_state"] == "stable"
+
+        original = session.control_value
+
+        def failing(control_type):
+            if control_type == 8:
+                raise RuntimeError("USB hiccup")
+            return original(control_type)
+
+        session.control_value = failing  # type: ignore[method-assign]
+        status = driver.cooling_status()
+        assert status["temperature_state"] == "stale"
+        assert status["detector_temperature_c"] == 12.3
+    finally:
+        driver.disconnect()

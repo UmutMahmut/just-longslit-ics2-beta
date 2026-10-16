@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from justls.ics.adapters.detector.adapter import BaseDetectorAdapter
 from justls.ics.domain.observation.models import (
@@ -62,6 +63,10 @@ class DetectorSubsystem:
         self._observation_meta: ObservationMeta | None = None
         self._latest_exposure_record: dict | None = None
 
+    @property
+    def state(self) -> ExposureState:
+        return self._state
+
     def get_snapshot(self) -> ExposureSnapshot:
         return ExposureSnapshot(
             state=self._state,
@@ -71,6 +76,9 @@ class DetectorSubsystem:
             latest_exposure_record=self._latest_exposure_record,
             camera_status=self.adapter.get_status(),
         )
+
+    def mark_failed(self) -> None:
+        self._state = ExposureState.FAILED
 
     def arm(
         self,
@@ -160,6 +168,9 @@ class DetectorSubsystem:
                 details={"state": self._state.value},
             )
 
+        preflight = getattr(getattr(self.adapter, "driver", None), "ensure_early_readout_supported", None)
+        if callable(preflight):
+            preflight()
         return self._complete_exposure(early_stop=True)
 
     def finish_normal(self) -> ExposureSnapshot:
@@ -170,6 +181,9 @@ class DetectorSubsystem:
                 details={"state": self._state.value},
             )
 
+        preflight = getattr(getattr(self.adapter, "driver", None), "ensure_readout_ready", None)
+        if callable(preflight):
+            preflight()
         return self._complete_exposure(early_stop=False)
 
     def _complete_exposure(self, *, early_stop: bool) -> ExposureSnapshot:
@@ -231,6 +245,49 @@ class DetectorSubsystem:
         self._armed = None
         self._state = ExposureState.COMPLETED
         return self.get_snapshot()
+
+    def save_last_frame(self) -> dict[str, Any]:
+        """Persist the last completed frame (e.g. when saving was not armed)."""
+        save = getattr(self.adapter, "save_last_frame", None)
+        if not callable(save):
+            raise InvalidStateError(
+                "the active detector cannot save a frame after readout",
+                subsystem="detector",
+                details={"state": self._state.value},
+            )
+        if self._last_exposure is None:
+            raise InvalidStateError(
+                "no completed frame is available to save",
+                subsystem="detector",
+                details={"state": self._state.value},
+            )
+        if self._last_exposure.get("result") == "discarded":
+            raise InvalidStateError(
+                "the last exposure was discarded and cannot be saved",
+                subsystem="detector",
+                details={"state": self._state.value},
+            )
+        try:
+            products = save()
+        except RuntimeError as exc:
+            raise InvalidStateError(
+                str(exc),
+                subsystem="detector",
+                details={"state": self._state.value},
+            ) from exc
+
+        self._last_exposure.update(products)
+        self._last_exposure["saved"] = True
+        # Data-product keys (file_uri, checksum, already_saved, ...) are
+        # surfaced at the top level so callers do not have to unwrap a nested
+        # payload; the full fragment stays available under "products".
+        return {
+            "saved": True,
+            "state": self._state.value,
+            "frame_token": self._last_exposure.get("frame_token"),
+            "products": products,
+            **products,
+        }
 
     def abort_discard(self) -> ExposureSnapshot:
         if self._state not in {ExposureState.ARMED, ExposureState.EXPOSING} or self._armed is None or self._observation_meta is None:

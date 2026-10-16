@@ -8,6 +8,9 @@ from fastapi import Depends
 
 from justls.ics.application.dispatcher import CommandDispatcher, validate_required_params
 from justls.ics.application.services.health_service import HealthService
+from justls.ics.application.services.instrument_context_service import (
+    InstrumentContextService,
+)
 from justls.ics.application.services.management_service import ManagementService
 from justls.ics.application.services.observatory_context_service import (
     ObservatoryContextService,
@@ -22,8 +25,12 @@ from justls.ics.application.services.observation_sequence_store import (
     initialize_runtime_sequence,
 )
 from justls.ics.application.services.observation_preview_service import ObservationPreviewService
+from justls.ics.application.services.output_location_service import OutputLocationService
 from justls.ics.application.services.setup_context_service import SetupContextService
 from justls.ics.application.services.setup_context_store import JsonSetupContextStore
+from justls.ics.infra.output_location import (
+    get_output_location_path,
+)
 from justls.ics.kernel.errors import InvalidStateError, UnsupportedError
 from justls.ics.kernel.runtime import Runtime, get_runtime
 
@@ -80,6 +87,28 @@ def get_observation_sequence_store() -> ObservationSequenceStore:
 
 def get_setup_context_service() -> SetupContextService:
     return SetupContextService(store=JsonSetupContextStore(get_setup_context_path()))
+
+
+def get_instrument_context_service() -> InstrumentContextService:
+    from justls.ics.infra.instrument_context import get_instrument_context_path
+
+    return InstrumentContextService(path=get_instrument_context_path())
+
+
+InstrumentContextServiceDep = Annotated[
+    InstrumentContextService,
+    Depends(get_instrument_context_service),
+]
+
+
+def get_output_location_service(runtime: RuntimeDep) -> OutputLocationService:
+    return OutputLocationService(runtime, path=get_output_location_path())
+
+
+OutputLocationServiceDep = Annotated[
+    OutputLocationService,
+    Depends(get_output_location_service),
+]
 
 
 def _require_slit(runtime: Runtime):
@@ -250,6 +279,11 @@ def _handle_observation_abort_discard(runtime: Runtime, request):
     return snapshot.to_dict()
 
 
+def _handle_observation_save_last_frame(runtime: Runtime, request):
+    detector = _require_detector(runtime)
+    return detector.save_last_frame()
+
+
 def get_dispatcher(runtime: RuntimeDep) -> CommandDispatcher:
     dispatcher = CommandDispatcher(runtime)
     dispatcher.register_handler("slit", "set_width", _handle_slit_set_width)
@@ -262,6 +296,7 @@ def get_dispatcher(runtime: RuntimeDep) -> CommandDispatcher:
     dispatcher.register_handler("detector", "finish_exposure", _handle_observation_finish)
     dispatcher.register_handler("detector", "stop_readout", _handle_observation_stop_readout)
     dispatcher.register_handler("detector", "abort_discard", _handle_observation_abort_discard)
+    dispatcher.register_handler("detector", "save_last_frame", _handle_observation_save_last_frame)
     return dispatcher
 
 

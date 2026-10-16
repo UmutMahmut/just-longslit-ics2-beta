@@ -48,12 +48,27 @@
     const armed = armedLabel() !== "not armed" || name.includes("armed");
     const active = name.includes("expos") || name.includes("integrat") || name.includes("running");
     const reading = name.includes("readout") || name.includes("reading");
-    const ready = name === "unknown" || name.includes("idle") || name.includes("ready") || name.includes("complete") || name.includes("finish");
+    // "discarded"/"aborted" must count as ready: after an abort the detector is
+    // idle again and the very next thing the operator does is re-arm. Treating
+    // these as non-ready would lock the panel permanently after one abort.
+    const ready =
+      name === "unknown" ||
+      name.includes("idle") ||
+      name.includes("ready") ||
+      name.includes("complete") ||
+      name.includes("finish") ||
+      name.includes("discard") ||
+      name.includes("abort") ||
+      name.includes("error") ||
+      name.includes("fail");
     return {
       "obs-arm": ready && !active && !reading,
       "obs-start": armed && !active && !reading,
       "obs-finish": active,
       "obs-stop-readout": armed || active || reading,
+      // The backend rejects a save when there is nothing to save, so the guard
+      // only has to keep it out of the way during acquisition.
+      "obs-save-last": !active && !reading,
       "obs-abort-discard": armed || active || reading,
     };
   }

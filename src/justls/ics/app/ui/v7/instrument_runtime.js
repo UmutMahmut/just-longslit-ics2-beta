@@ -13,7 +13,20 @@
   const CALIBRATION_LAMP_ENDPOINT = "/api/v1/calibration/lamp";
   const DETECTOR_CONFIG_ENDPOINT = "/api/v1/detector/config";
 
-  const SLIT_UM_PER_ARCSEC = 128.34;
+  // Plate scale is platform-specific: um/arcsec = focal_length_mm / 206.265.
+  // The old hardcoded 128.34 was the JUST telescope value and is wrong by >5x
+  // on other platforms (50 cm f/10 gives 5000 / 206.265 = 24.24).
+  // Override by injecting window.JUSTLS_PLATFORM_CONFIG = { telescope_focal_length_mm: <mm> }
+  // before this script loads; the default matches the Beta 50 cm f/10 platform.
+  const ARCSEC_PER_RADIAN = 206265;
+  const DEFAULT_TELESCOPE_FOCAL_LENGTH_MM = 5000;
+  const platformConfig = window.JUSTLS_PLATFORM_CONFIG || {};
+  const configuredFocalLengthMm = Number(platformConfig.telescope_focal_length_mm);
+  const TELESCOPE_FOCAL_LENGTH_MM =
+    Number.isFinite(configuredFocalLengthMm) && configuredFocalLengthMm > 0
+      ? configuredFocalLengthMm
+      : DEFAULT_TELESCOPE_FOCAL_LENGTH_MM;
+  const SLIT_UM_PER_ARCSEC = (TELESCOPE_FOCAL_LENGTH_MM * 1000) / ARCSEC_PER_RADIAN;
   const COMMON_SLIT_WIDTH_ARCSEC = [1.0, 1.5, 2.0, 3.0];
 
   const runtime = window[GLOBAL_KEY] || {
@@ -87,7 +100,7 @@
             <div class="panel-body">
               <div class="field-grid">
                 <label>Width (arcsec)<input type="number" min="0.001" step="0.001" value="1.0" data-role="instrument-slit-width-arcsec" /></label>
-                <label>Width (um)<input type="number" min="0.001" step="0.001" value="128.34" data-role="instrument-slit-width-um" /></label>
+                <label>Width (um)<input type="number" min="0.001" step="0.001" value="24.24" data-role="instrument-slit-width-um" /></label>
                 <label>Angle (deg)<input type="number" min="-90" max="90" step="0.001" value="0" data-role="instrument-slit-angle-deg" /></label>
                 <button class="btn primary" type="button" data-action="instrument-set-slit-width" disabled>Set Width</button>
                 <button class="btn" type="button" data-action="instrument-set-slit-angle" disabled>Set Angle</button>
@@ -95,7 +108,7 @@
               <dl class="kv compact-kv" style="margin-top: 8px;">
                 <dt>Current Width</dt><dd><code data-bind="v7.instrument.slit.width_current">not connected</code></dd>
                 <dt>Current Angle</dt><dd><code data-bind="v7.instrument.slit.angle_current">not connected</code></dd>
-                <dt>Conversion</dt><dd><code>1 arcsec = <span data-bind="v7.instrument.slit.conversion_um_per_arcsec">128.34</span> um</code></dd>
+                <dt>Conversion</dt><dd><code>1 arcsec = <span data-bind="v7.instrument.slit.conversion_um_per_arcsec">24.24</span> um</code></dd>
               </dl>
               <div class="badge-row" data-role="instrument-slit-shortcuts" aria-label="common slit width shortcuts" style="margin-top: 8px;">
                 <button class="btn" type="button" data-role="instrument-slit-shortcut" data-arcsec="1.0" disabled>1.0"</button>
@@ -571,7 +584,7 @@
         if (Number.isFinite(widthUm) && widthUm > 0 && arcInput) arcInput.value = formatNumber(arcsecFromUm(widthUm), 3);
       });
     }
-    setText(bind("v7.instrument.slit.conversion_um_per_arcsec"), SLIT_UM_PER_ARCSEC);
+    setText(bind("v7.instrument.slit.conversion_um_per_arcsec"), formatNumber(SLIT_UM_PER_ARCSEC, 2));
   }
 
   function bindSlitShortcuts() {

@@ -2085,7 +2085,19 @@ html.theme-light .warning:hover {
       lastPresetResult: null,
     };
 
-    const SLIT_UM_PER_ARCSEC = 128.34;
+    // Plate scale is platform-specific: um/arcsec = focal_length_mm / 206.265.
+    // The old hardcoded 128.34 was the JUST telescope value; on the 50 cm f/10
+    // Beta platform the correct value is 5000 / 206.265 = 24.24.
+    // Override by injecting window.JUSTLS_PLATFORM_CONFIG = { telescope_focal_length_mm: <mm> }.
+    const ARCSEC_PER_RADIAN = 206265;
+    const DEFAULT_TELESCOPE_FOCAL_LENGTH_MM = 5000;
+    const platformConfig = window.JUSTLS_PLATFORM_CONFIG || {};
+    const configuredFocalLengthMm = Number(platformConfig.telescope_focal_length_mm);
+    const TELESCOPE_FOCAL_LENGTH_MM =
+      Number.isFinite(configuredFocalLengthMm) && configuredFocalLengthMm > 0
+        ? configuredFocalLengthMm
+        : DEFAULT_TELESCOPE_FOCAL_LENGTH_MM;
+    const SLIT_UM_PER_ARCSEC = (TELESCOPE_FOCAL_LENGTH_MM * 1000) / ARCSEC_PER_RADIAN;
 
     function qsa(selector) {
       return Array.from(document.querySelectorAll(selector));

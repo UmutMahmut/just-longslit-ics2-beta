@@ -26,6 +26,7 @@ def _sequence_serialized(method):
     @wraps(method)
     def wrapper(self, *args, **kwargs):
         with self.runtime.sequence_lock:
+            self.runtime.require_open()
             return method(self, *args, **kwargs)
 
     return wrapper
@@ -374,7 +375,30 @@ class ObservationService:
             params={},
             source=CommandSource.API,
         )
-        return self.dispatcher.dispatch(request)
+        result = self.dispatcher.dispatch(request)
+        if not sequence_owned:
+            self._schedule_auto_readout(result)
+        return result
+
+    def _schedule_auto_readout(self, result: DispatchResult) -> None:
+        """Read the exposure out automatically once its timer has elapsed."""
+        if result.job.status.value != "succeeded":
+            return
+        payload = result.payload if isinstance(result.payload, dict) else {}
+        if self._observation_state_from_payload(payload) != "exposing":
+            return
+
+        status = self.get_exposure_status()
+        armed = status.get("armed_exposure") or {}
+        exp_time_s = armed.get("exp_time_s")
+        if not isinstance(exp_time_s, (int, float)) or exp_time_s <= 0:
+            return
+
+        self.runtime.schedule_readout(
+            duration_s=float(exp_time_s),
+            callback=self.finish,
+            description=f"single-{armed.get('exp_id') or 'exposure'}",
+        )
 
     @_sequence_serialized
     def finish(self, *, sequence_owned: bool = False) -> DispatchResult:
@@ -385,7 +409,12 @@ class ObservationService:
             params={},
             source=CommandSource.API,
         )
-        return self.dispatcher.dispatch(request)
+        result = self.dispatcher.dispatch(request)
+        if result.job.status.value == "succeeded" or (
+            self.runtime.detector is not None and self.runtime.detector.state.value == "failed"
+        ):
+            self.runtime.cancel_readout()
+        return result
 
     @_sequence_serialized
     def stop_readout(self, *, sequence_owned: bool = False) -> DispatchResult:
@@ -396,14 +425,36 @@ class ObservationService:
             params={},
             source=CommandSource.API,
         )
-        return self.dispatcher.dispatch(request)
+        result = self.dispatcher.dispatch(request)
+        if result.job.status.value == "succeeded" or (
+            self.runtime.detector is not None and self.runtime.detector.state.value == "failed"
+        ):
+            self.runtime.cancel_readout()
+        return result
 
     @_sequence_serialized
     def abort_discard(self, *, sequence_owned: bool = False) -> DispatchResult:
         self._enforce_sequence_ownership(sequence_owned=sequence_owned)
+        self.runtime.cancel_readout()
         request = CommandRequest.create(
             subsystem="detector",
             action="abort_discard",
+            params={},
+            source=CommandSource.API,
+        )
+        return self.dispatcher.dispatch(request)
+
+    @_sequence_serialized
+    def save_last_frame(self, *, sequence_owned: bool = False) -> DispatchResult:
+        """Write the most recent completed frame to disk after the fact.
+
+        Operators routinely forget to tick "save" before arming; the frame is
+        still in memory, so it can be persisted without re-exposing.
+        """
+        self._enforce_sequence_ownership(sequence_owned=sequence_owned)
+        request = CommandRequest.create(
+            subsystem="detector",
+            action="save_last_frame",
             params={},
             source=CommandSource.API,
         )

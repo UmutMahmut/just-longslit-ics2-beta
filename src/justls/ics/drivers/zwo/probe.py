@@ -1,12 +1,19 @@
 from __future__ import annotations
 
+from justls.ics.drivers.zwo.native_calls import ZwoHardwareTimeoutError, ZwoSdkQuarantinedError
+
 import argparse
 import json
 import os
 from pathlib import Path
 from typing import Sequence
 
-from justls.ics.drivers.zwo.sdk import ZwoSdk
+from justls.ics.drivers.zwo.sdk import (
+    ZwoCameraTopologyChangedError,
+    ZwoSdk,
+    ZwoSdkError,
+    ZwoSdkLibraryLoadError,
+)
 
 
 SDK_LIBRARY_ENV = "ICS_ZWO_SDK_LIBRARY"
@@ -49,8 +56,36 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    sdk = ZwoSdk(resolve_sdk_library(args.dll))
-    cameras = sdk.discover()
+    try:
+        sdk = ZwoSdk(resolve_sdk_library(args.dll))
+        cameras = sdk.discover()
+    except ZwoCameraTopologyChangedError as exc:
+        print(
+            json.dumps(
+                {
+                    "error": "camera_topology_changed",
+                    "detail": str(exc),
+                    "expected_count": exc.expected_count,
+                    "actual_count": exc.actual_count,
+                    "recovery": "re-run the probe after the USB topology settles",
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 2
+    except (ZwoSdkLibraryLoadError, ZwoSdkError, ZwoHardwareTimeoutError, ZwoSdkQuarantinedError) as exc:
+        print(
+            json.dumps(
+                {
+                    "error": type(exc).__name__,
+                    "detail": str(exc),
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 2
     controls_by_camera: dict[str, list[dict]] = {}
     serial_by_camera: dict[str, str] = {}
     if args.controls:

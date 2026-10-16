@@ -23,6 +23,7 @@ class DetectorFrameMetadata(BaseModel):
     gain: float | None = None
     offset: float | None = None
     detector_temperature_c: float | None = None
+    temperature_state: Literal["stable", "stale", "invalid"] | None = None
     cooler_enabled: bool | None = None
     cooler_target_c: float | None = None
     cooler_power_pct: float | None = Field(default=None, ge=0, le=100)
@@ -40,6 +41,7 @@ class DetectorFrameMetadata(BaseModel):
             "GAIN": self.gain,
             "OFFSET": self.offset,
             "CCD-TEMP": self.detector_temperature_c,
+            "TEMPSTAT": self.temperature_state,
             "COOLER": self.cooler_enabled,
             "SET-TEMP": self.cooler_target_c,
             "COOLPOWR": self.cooler_power_pct,

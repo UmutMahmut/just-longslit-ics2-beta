@@ -66,6 +66,11 @@ class DetectorAdapter(BaseDetectorAdapter):
         self.logical_channels = logical_channels
         self.simulated = simulated
         self._latest_preview: bytes | None = None
+        # The last completed frame stays available so an operator who forgot to
+        # request saving at arm time can still persist it afterwards.
+        self._last_image: Any | None = None
+        self._last_result: dict[str, Any] | None = None
+        self._last_products: dict[str, Any] | None = None
 
     def start_exposure(
         self,
@@ -97,26 +102,67 @@ class DetectorAdapter(BaseDetectorAdapter):
         result["shared_capture_id"] = result["frame_token"]
         result["simulated"] = self.simulated
 
+        self._last_image = image
+        self._last_result = dict(result)
+        self._last_products = None
+
         if result["save_requested"] and self.writer is not None:
-            products = self.writer.write(
-                image,
-                obs_id=result["obs_id"],
-                exp_id=result["exp_id"],
-                frame_token=result["frame_token"],
-                frame_type=result["frame_type"],
-                exp_time_s=result["exp_time_s"],
-                actual_exp_time_s=result.get("actual_exp_time_s"),
-                camera_id=result["physical_camera_id"],
-                logical_channels=self.logical_channels,
-                started_at=result["started_at"],
-                finished_at=result["finished_at"],
-                detector_metadata=result.get("detector_metadata"),
-                simulated=self.simulated,
-            )
-            result.update(products.to_result_fragment())
+            self._last_products = self._write_frame(image, result)
+            result.update(self._last_products)
         return result
 
+    def _write_frame(self, image: Any, result: dict[str, Any]) -> dict[str, Any]:
+        products = self.writer.write(
+            image,
+            obs_id=result["obs_id"],
+            exp_id=result["exp_id"],
+            frame_token=result["frame_token"],
+            frame_type=result["frame_type"],
+            exp_time_s=result["exp_time_s"],
+            actual_exp_time_s=result.get("actual_exp_time_s"),
+            camera_id=result["physical_camera_id"],
+            logical_channels=self.logical_channels,
+            started_at=result["started_at"],
+            finished_at=result["finished_at"],
+            detector_metadata=result.get("detector_metadata"),
+            simulated=self.simulated,
+        )
+        return products.to_result_fragment()
+
+    def save_last_frame(self) -> dict[str, Any]:
+        """Persist the most recent completed frame.
+
+        Returns the data-product fragment. Frames that were already saved at
+        readout time are reported back without writing a second copy.
+        """
+        if self._last_image is None or self._last_result is None:
+            raise RuntimeError("no completed frame is available to save")
+        if self.writer is None:
+            raise RuntimeError("no data writer is configured for this detector")
+
+        if self._last_products is not None:
+            return {
+                **self._last_products,
+                "saved": True,
+                "already_saved": True,
+                "frame_token": self._last_result["frame_token"],
+            }
+
+        self._last_products = self._write_frame(self._last_image, self._last_result)
+        return {
+            **self._last_products,
+            "saved": True,
+            "already_saved": False,
+            "frame_token": self._last_result["frame_token"],
+        }
+
     def abort_exposure(self) -> dict[str, Any]:
+        # A discarded exposure yields no image, so the pending save buffer must
+        # be dropped; otherwise "save last frame" would silently re-persist the
+        # previous frame under the aborted observation.
+        self._last_image = None
+        self._last_result = None
+        self._last_products = None
         return self.driver.abort_exposure()
 
     def get_status(self) -> dict[str, Any]:
