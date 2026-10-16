@@ -1,3 +1,18 @@
+## Main development checkpoint prepared for operator push — 2026-10-16
+
+At the operator's explicit request, the local repair work and their preview
+height/padding adjustments are integrated into local main as a temporary
+checkpoint. GitHub Desktop push remains the operator's action. The hardware
+stability failure documented below is still unresolved; this integration does
+not declare acceptance. Historical notes about an unmerged repair branch below
+describe the earlier review stage.
+
+README now documents fresh Windows installation, Python dependencies, SDK DLL,
+serial-specific configuration and initial manual checks. Generated local state,
+logs and captures remain ignored. Four obsolete static JPEG snapshots are
+removed from the current tracked tree (local copies retained); the unused static
+camera mount is removed. Git history is preserved rather than rewritten.
+
 ## Stability review and unresolved hardware failure — 2026-10-16
 
 Software validation: **458 automated tests passed**, including injected guide

@@ -6,14 +6,15 @@ The beta slit and lamps are manually operated; their simulator adapters remain
 available. The current ZWO cameras are deployment choices, not architectural
 requirements for future detectors.
 
-## Verified baseline (2026-10-16)
+## Development checkpoint (2026-10-16)
 
 The integrated candidate retains main's generic device/role contracts, FITS
 publication and durable sequence recovery, and incorporates the useful
 `stable/2026-10-15` snapshot features with acquisition-lifecycle repairs.
 
 - Simulator single/sequence workflows; automatic per-exposure readout by default.
-- Operator starts each sequence step; there is no unattended auto-advance.
+- New UI plans default to automatic sequence advance; uncheck before loading
+  for operator-stepped acquisition. Restart/recovery never starts a plan itself.
 - Managed ZWO RAW16 science acquisition and independent slit/guide JPEG preview.
 - Serial-based dual-camera binding with discovery completed before acquisition.
 - Runtime-owned, generation-guarded readout tasks; serialized transitions.
@@ -26,13 +27,16 @@ publication and durable sequence recovery, and incorporates the useful
 - Optional FITS/PNG persistence, save-last-frame, output-location selection,
   operator instrument context and exposure provenance.
 
-Validation: **458 automated tests passed** on the manual-feedback repair branch.
+Validation: **458 automated tests passed** for this development checkpoint.
 Bias accepts a zero-second request (mapped to the SDK minimum), Lhires Flat/Arc
 use manual illumination, and Observe provides camera acquisition settings.
-This local repair round awaits the operator's browser retest before main.
-A real ASI294MC Pro + ASI678MC bench
-acceptance passed through FastAPI, including independent Astropy FITS validation,
+Operator browser tests exercised basic acquisition. Earlier short ASI294MC Pro +
+ASI678MC acceptance passed, including independent Astropy FITS validation,
 concurrent guide preview, abort/replacement, sequences, reload and shutdown/restart.
+The latest extended run FAILED after seven automatic three-frame cycles: guide
+frame 90 failed, and fresh-process discovery subsequently raised a native SDK
+access violation. This is a runnable development checkpoint, not a long-run
+hardware stability release. USB reconnect may still be needed after this fault.
 See `docs/project_status.md` for evidence, limits and integration provenance.
 
 ZWO retained early readout is explicitly unsupported in the current snap adapter.
@@ -68,6 +72,42 @@ The launcher uses `.venv\Scripts\python.exe` or a non-Store Python on PATH;
 kills another process. `-ForceSim` explicitly selects simulation; missing SDK
 paths do not silently enable simulation. No ASIStudio capture application is
 required at runtime. Close competing vendor camera sessions before acquisition.
+
+## New Windows computer
+
+1. Clone this repository with GitHub Desktop and select `main`.
+2. Install 64-bit Python 3.12, the ZWO Windows camera driver and the 64-bit ZWO
+   SDK DLL (ASIStudio can supply the DLL). Driver installation alone does not
+   install Python or the project dependencies. Close ASI capture applications.
+3. Open PowerShell in the cloned repository and install into a local environment:
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\start_ics.ps1 -ForceSim
+```
+
+Stop the simulator with Ctrl-C, connect the cameras, then launch with the DLL's
+actual location on that computer:
+
+```powershell
+.\start_ics.ps1 -SdkLibrary "C:\vendor\ASICamera2.dll"
+```
+
+Open `http://127.0.0.1:8123/ui/v7` if the browser did not open automatically.
+The supplied dual-camera profile matches the serials of this bench's ASI294 and
+ASI678. The same physical cameras can keep that profile on a new computer; other
+cameras require the appropriate serial/role/ROI configuration. Set the new
+output directory in Setup and verify both cameras before acquisition. Start with
+a short saved Test frame, a zero-request Bias, and a three-row automatic sequence;
+check the files and guide preview. Prepare calibration illumination manually.
+The existing SDK stability limitation above still applies on a new computer
+until tested there; a successful clone/install is not hardware acceptance.
+
+Python environments, DLLs, captures, logs and local operator/recovery state are
+not supplied through Git. Generated FITS/PNG/JPEG products belong under `var/`
+or another ignored capture directory. Source-code/documentation image assets
+are distinct from generated camera frames.
 
 ## Camera profiles and local state
 

@@ -58,3 +58,20 @@ var/
 
 # Local persisted operator setup context
 .justls/
+
+# Camera captures, including files saved outside the default var/ directory
+*.[fF][iI][tT]
+*.[fF][iI][tT][sS]
+*.[fF][tT][sS]
+*.[fF][iI][tT].gz
+*.[fF][iI][tT][sS].gz
+*.[fF][tT][sS].gz
+*.ser
+/captures/
+/data/
+/output/
+/outputs/
+/quicklooks/
+
+# Obsolete static camera snapshots; live endpoints generate previews dynamically
+/src/justls/ics/app/api/v1/camera/

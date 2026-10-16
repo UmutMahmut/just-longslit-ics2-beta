@@ -154,12 +154,6 @@ PHASE_2D8_V7_OBSERVE_GUARD_ENABLED_ENV = "JUSTLS_UI_V7_OBSERVE_GUARD_ENABLED"
 if UI_DIR.exists():
     app.mount("/ui-assets", StaticFiles(directory=UI_DIR), name="ui-assets")
 
-# 添加相机图像的静态文件挂载
-CAMERA_DIR = Path(__file__).resolve().parent / "api" / "v1" / "camera"
-if CAMERA_DIR.exists():
-    app.mount("/camera", StaticFiles(directory=CAMERA_DIR), name="camera")
-
-
 def env_flag(name: str, *, default: bool = True) -> bool:
     """Read a simple boolean environment flag.
 
